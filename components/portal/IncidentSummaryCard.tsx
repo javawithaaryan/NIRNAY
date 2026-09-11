@@ -9,7 +9,7 @@ import { sessionActor, type PortalSession } from "@/lib/auth/session";
 import { portalActions } from "@/lib/scenario/actions";
 import type { PortalState } from "@/lib/scenario/events";
 import { formatStamp } from "@/lib/scenario/format";
-import { buildIncidentIntelligence, type SeverityTier } from "@/lib/scenario/intelligence";
+import { buildIncidentIntelligence, corroborationConfidencePercent, corroborationPipeline, type SeverityTier } from "@/lib/scenario/intelligence";
 import { getRoute } from "@/lib/scenario/seed/nh29";
 import type { IncidentView, PortalView } from "@/lib/scenario/view";
 
@@ -40,6 +40,7 @@ export function IncidentSummaryCard({ view, state, incidentView, session }: Prop
 
   const { incident, assessment, interpretation, severity } = incidentView;
   const intel = buildIncidentIntelligence(view, incidentView, state);
+  const pipeline = corroborationPipeline(incidentView.evidence);
   const factor = (key: string) => intel.severityFactors.find((item) => item.key === key);
   const exposed = view.missions.filter((mission) =>
     [
@@ -55,7 +56,7 @@ export function IncidentSummaryCard({ view, state, incidentView, session }: Prop
     exposed.length
       ? `${essential.length ? "Essential missions" : "Missions"} affected — ${exposed.map((mission) => `${mission.mission.id} ${mission.mission.cargo.toLowerCase()}`).join(", ")}`
       : "No mission currently routed over this segment",
-    assessment.corroborated ? `Corroborating evidence — ${assessment.independentSources} independent sources` : "Corroboration pending",
+    assessment.corroborated ? `Corroborating evidence — ${assessment.independentSources} independent sources` : `Corroboration in progress — ${pipeline.received} / ${pipeline.total} evidence sources received`,
   ];
 
   return (
@@ -71,7 +72,7 @@ export function IncidentSummaryCard({ view, state, incidentView, session }: Prop
         {interpretation ? (
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
             <Metric label="Likely hazard" value={interpretation.hazard.label.toUpperCase()} />
-            <Metric label="Confidence" value={<span data-ai-confidence>{interpretation.confidence.toFixed(2)}</span>} />
+            <Metric label="AI hazard confidence" value={<span data-ai-confidence>{interpretation.confidence.toFixed(2)}</span>} />
             <Metric label="Supporting sources" value={`${intel.rows.length - 1} + field report`} note={`${assessment.independentSources} independent · ${intel.rows.filter((row) => row.item.origin !== "FIELD").length} simulated / demo data`} />
             <Metric label="Consistency" value={interpretation.consistency.assessment.replace("_", " ")} />
           </dl>
@@ -84,6 +85,25 @@ export function IncidentSummaryCard({ view, state, incidentView, session }: Prop
               {busy === "ai" ? "Analysing…" : "Run AI analysis"}
             </button>
           </div>
+        )}
+
+        {assessment.corroborated ? (
+          <div data-corroboration-status="corroborated" className="flex items-center justify-between gap-3 rounded-xs border border-success-outline bg-success-container/40 px-3 py-2">
+            <span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-success">Corroboration confidence</span>
+              <span className="block text-xs text-on-surface-variant">
+                {incidentView.evidence.length} evidence items · {assessment.independentSources} independent corroborating sources
+              </span>
+            </span>
+            <span data-corroboration-confidence className="text-2xl font-black text-primary-container">{corroborationConfidencePercent(assessment.E)}%</span>
+          </div>
+        ) : (
+          <p data-corroboration-status="in-progress" className="rounded-xs border border-outline-variant/60 bg-surface-container-low px-3 py-2 text-xs">
+            <span className="block font-bold uppercase tracking-wider text-secondary">Corroboration in progress</span>
+            <span className="text-on-surface-variant">
+              {pipeline.received} / {pipeline.total} evidence sources received · {pipeline.channels.filter((channel) => !channel.item).map((channel) => channel.label.toLowerCase()).join(", ")} pending
+            </span>
+          </p>
         )}
 
         <div data-severity className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-3">
@@ -103,7 +123,7 @@ export function IncidentSummaryCard({ view, state, incidentView, session }: Prop
           {interpretation
             ? incident.verifiedAt
               ? "AI analysis supported the assessment; the incident was verified by an authorized officer."
-              : "AI analysis supports the assessment; officer verification is required."
+              : "AI-assisted triage brought the evidence together; final verification remains with the authorized officer."
             : "AI is assistive — it does not verify incidents."}
         </p>
 

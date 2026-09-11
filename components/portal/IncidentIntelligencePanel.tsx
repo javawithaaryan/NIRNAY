@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Bot, Check, CircleAlert, MapPinned, Radar, ShieldCheck, UserCheck } from "lucide-react";
+import { Bot, Check, CircleAlert, Hourglass, MapPinned, Radar, ShieldCheck, UserCheck } from "lucide-react";
 import { AiInterpretationPanel } from "@/components/portal/AiInterpretationPanel";
 import { EvidencePhoto } from "@/components/portal/EvidencePhoto";
 import { Badge, SimulatedTag, evidenceStatusTone, labelize, portalDangerButton, portalPrimaryButton, portalSecondaryButton, roadStateTone, type Tone } from "@/components/portal/ui";
@@ -11,7 +11,7 @@ import { portalActions } from "@/lib/scenario/actions";
 import { evidenceWeights } from "@/lib/scenario/engine/evidence";
 import type { PortalState } from "@/lib/scenario/events";
 import { formatStamp } from "@/lib/scenario/format";
-import { buildIncidentIntelligence, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
+import { buildIncidentIntelligence, corroborationConfidencePercent, corroborationPipeline, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
 import { getPlace, getSegment } from "@/lib/scenario/seed/nh29";
 import type { IncidentView, PortalView } from "@/lib/scenario/view";
 
@@ -50,6 +50,7 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
   const [busy, setBusy] = useState<string | null>(null);
   const { incident, assessment, severity, evidence, interpretation, segment, networkApplied } = incidentView;
   const intel = buildIncidentIntelligence(view, incidentView, state);
+  const pipeline = corroborationPipeline(evidence);
   const actor = sessionActor(session);
   const seg = getSegment(incident.segmentId);
   const placeName = getPlace(seg.fromPlaceId).name;
@@ -114,7 +115,31 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
         <AiInterpretationPanel incidentId={incident.id} interpretation={interpretation} evidenceCount={evidence.length} verified={Boolean(incident.verifiedAt)} />
       </Stage>
 
-      <Stage id="corroboration" number={3} title="Multi-source evidence corroboration" icon={<Radar aria-hidden="true" className="size-4" />} badge={<Badge tone={assessment.corroborated ? "success" : "warning"}>{assessment.corroborated ? `Corroborated · ${assessment.independentSources} independent sources` : `${assessment.independentSources} independent source(s)`}</Badge>}>
+      <Stage id="corroboration" number={3} title="Multi-source evidence corroboration" icon={<Radar aria-hidden="true" className="size-4" />} badge={<Badge tone={assessment.corroborated ? "success" : "info"}>{assessment.corroborated ? `Corroborated · ${assessment.independentSources} independent sources` : "Corroboration in progress"}</Badge>}>
+        {assessment.corroborated ? (
+          <p data-corroboration-status="corroborated" className="mb-3 text-sm font-bold uppercase tracking-wide text-success">
+            Corroborated · {assessment.independentSources} independent sources · {pipeline.received} / {pipeline.total} evidence channels received
+          </p>
+        ) : (
+          <div data-corroboration-status="in-progress" className="mb-3">
+            <p className="text-sm font-bold uppercase tracking-wide text-secondary">
+              Corroboration in progress · {pipeline.received} / {pipeline.total} evidence sources received
+            </p>
+            <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {pipeline.channels.map((channel) => (
+                <li key={channel.key} data-channel={channel.key} data-channel-state={channel.item ? "received" : "pending"} className={`flex items-center gap-2 rounded-xs border px-2.5 py-1.5 text-xs ${channel.item ? "border-success-outline bg-success-container/40" : "border-outline-variant/60 bg-surface-container-low"}`}>
+                  {channel.item ? <Check aria-hidden="true" className="size-4 shrink-0 text-success" /> : <Hourglass aria-hidden="true" className="size-4 shrink-0 text-secondary" />}
+                  <span className="font-semibold text-primary-container">{channel.label}</span>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    {channel.item && <SimulatedTag origin={channel.item.origin} />}
+                    <span className={`font-bold uppercase tracking-wide ${channel.item ? "text-success" : "text-secondary"}`}>{channel.item ? channel.receivedStatus : channel.pendingStatus}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[0.6875rem] text-on-surface-variant">Nearby reports are searched in this device&apos;s field-report store; weather, institutional, logistics and context feeds are simulated or seeded in this prototype and attach as the scenario advances.</p>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-xs">
             <thead>
@@ -158,11 +183,25 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
         <p data-ai-synthesis className="text-sm font-medium text-on-surface">“{intel.synthesis}”</p>
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt><dd className="font-mono text-lg font-bold text-primary-container">E = {assessment.E.toFixed(2)}</dd><dd className="text-[0.6875rem] text-on-surface-variant">L {assessment.L.toFixed(2)}×{evidenceWeights.L} · T {assessment.T.toFixed(2)}×{evidenceWeights.T} · C {assessment.C.toFixed(2)}×{evidenceWeights.C} · S {assessment.S.toFixed(2)}×{evidenceWeights.S} · K {assessment.K.toFixed(2)}×{evidenceWeights.K}</dd></div>
-          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{evidence.length} evidence items · {assessment.independentSources} independent</dd></div>
+          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{assessment.corroborated ? `${evidence.length} evidence items · ${assessment.independentSources} independent` : `In progress · ${pipeline.received} / ${pipeline.total} sources`}</dd></div>
           <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Freshness</dt><dd><Badge tone={intel.freshness === "CURRENT" ? "success" : intel.freshness === "AGEING" ? "warning" : "danger"}>{intel.freshness}</Badge></dd></div>
           <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">AI interpretation</dt><dd className="font-semibold">{interpretation ? `CONSISTENT WITH ${interpretation.hazard.label}` : "pending"}</dd></div>
         </dl>
-        <p className="mt-3 rounded-xs border border-error/30 bg-error-container/50 px-3 py-2 text-xs font-bold text-on-error-container">AI assessment does not constitute official verification.</p>
+        <div data-ai-triage className="mt-3 grid grid-cols-1 gap-3 rounded-xs border border-secondary/30 bg-secondary-container/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-primary-container">AI-assisted triage</p>
+            <p className="mt-1 text-sm text-on-surface">Cross-checks available field, nearby, weather, institutional, logistics and historical signals to prioritize verification.</p>
+            <p className="mt-1 text-xs text-on-surface-variant">AI reduces manual evidence-checking time by bringing relevant signals together for the verifying officer.</p>
+          </div>
+          <div className="sm:text-right">
+            <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Corroboration confidence</p>
+            <p data-corroboration-confidence className="text-3xl font-black text-primary-container">{corroborationConfidencePercent(assessment.E)}%</p>
+            <p className="text-xs text-on-surface-variant">
+              {assessment.corroborated ? `${evidence.length} evidence items · ${assessment.independentSources} independent corroborating sources` : `Corroboration in progress · ${pipeline.received} / ${pipeline.total} sources`}
+            </p>
+          </div>
+          <p className="text-[0.6875rem] text-on-surface-variant sm:col-span-2">Final incident verification remains with the authorized officer. Confidence shown is the deterministic evidence score E = {assessment.E.toFixed(2)}.</p>
+        </div>
       </Stage>
 
       <Stage id="severity" number={5} title="Incident assessment — severity" icon={<CircleAlert aria-hidden="true" className="size-4" />} badge={<Badge tone={severityTone[intel.severityTier]}>{intel.severityTier}</Badge>}>

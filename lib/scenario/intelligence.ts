@@ -142,7 +142,7 @@ export function buildIncidentIntelligence(view: PortalView, incidentView: Incide
   const rail: RailStage[] = [
     { key: "report", label: "Field report received", state: "done", detail: `${incident.reference} · ${placeName}` },
     { key: "ai", label: "AI decoded", state: interpretation ? "done" : "active", detail: interpretation ? `${interpretation.hazard.label} · ${interpretation.confidence.toFixed(2)}` : "pending AI analysis" },
-    { key: "corroboration", label: "Corroborated", state: assessment.corroborated ? "done" : interpretation ? "active" : "pending", detail: `${assessment.independentSources} independent sources · E ${assessment.E.toFixed(2)}` },
+    { key: "corroboration", label: "Corroborated", state: assessment.corroborated ? "done" : interpretation ? "active" : "pending", detail: assessment.corroborated ? `${assessment.independentSources} independent sources · E ${assessment.E.toFixed(2)}` : "corroboration in progress" },
     {
       key: "verification",
       label: "Officer verification",
@@ -188,4 +188,36 @@ export function buildIncidentIntelligence(view: PortalView, incidentView: Incide
     timeline,
     verificationState,
   };
+}
+
+export type CorroborationChannel = {
+  key: string;
+  label: string;
+  item: EvidenceItem | null;
+  receivedStatus: string;
+  pendingStatus: string;
+};
+
+const channelDefinitions: { key: string; label: string; kinds: EvidenceKind[]; receivedStatus: string; pendingStatus: string }[] = [
+  { key: "field", label: "Field report", kinds: ["FIELD_REPORT"], receivedStatus: "RECEIVED", pendingStatus: "AWAITING" },
+  { key: "nearby", label: "Nearby / second report", kinds: ["NEARBY_REPORT", "SECOND_REPORT"], receivedStatus: "CORROBORATES", pendingStatus: "SEARCHING" },
+  { key: "weather", label: "Weather context", kinds: ["WEATHER"], receivedStatus: "SUPPORTS", pendingStatus: "CHECKING" },
+  { key: "institutional", label: "Institutional alerts", kinds: ["INSTITUTIONAL"], receivedStatus: "CORROBORATES", pendingStatus: "CHECKING" },
+  { key: "logistics", label: "Logistics reports", kinds: ["LOGISTICS"], receivedStatus: "SUPPORTS", pendingStatus: "CHECKING" },
+  { key: "context", label: "Historical / context record", kinds: ["HISTORICAL", "NETWORK_RECORD"], receivedStatus: "LOADED", pendingStatus: "LOADING" },
+];
+
+export function corroborationPipeline(evidence: EvidenceItem[]): { channels: CorroborationChannel[]; received: number; total: number } {
+  const channels = channelDefinitions.map((definition) => ({
+    key: definition.key,
+    label: definition.label,
+    item: evidence.find((item) => definition.kinds.includes(item.kind)) ?? null,
+    receivedStatus: definition.receivedStatus,
+    pendingStatus: definition.pendingStatus,
+  }));
+  return { channels, received: channels.filter((channel) => channel.item).length, total: channels.length };
+}
+
+export function corroborationConfidencePercent(E: number): number {
+  return Math.round(E * 100);
 }
