@@ -17,6 +17,7 @@ export function ApprovalsPage() {
   const pending = [...view.decisions].reverse().filter((decision) => decision.status === "RECOMMENDED");
   const acted = [...view.decisions].reverse().filter((decision) => decision.status !== "RECOMMENDED" && decision.status !== "SUPERSEDED");
   const allowed = canApprove(session);
+  const missionFor = (id: string) => view.missions.find((mission) => mission.mission.id === id) ?? null;
 
   const act = async (decisionId: string, status: Exclude<DecisionStatus, "RECOMMENDED" | "SUPERSEDED">) => {
     setBusy(decisionId);
@@ -31,7 +32,7 @@ export function ApprovalsPage() {
     <>
       <PageHeader
         title="Approvals"
-        subtitle="The system recommends; the authority authorizes. Approval issues the driver instruction; nothing moves on a recommendation alone."
+        subtitle="The authority approves an operational mission decision — not just a record. The system recommends; approval issues the driver instruction; nothing moves on a recommendation alone."
       />
       {!allowed && (
         <p className="rounded-xs border border-warning-outline bg-warning-container px-4 py-2.5 text-sm text-warning">
@@ -43,10 +44,11 @@ export function ApprovalsPage() {
         <h2 className="text-sm font-bold uppercase tracking-wide text-primary-container">Awaiting authority ({pending.length})</h2>
         {pending.length === 0 && <p className="text-sm text-on-surface-variant">Nothing awaits authority.</p>}
         {pending.map((decision) => (
-          <DecisionCard key={decision.id} decision={decision}>
-            <div className="flex flex-wrap gap-2 border-t border-outline-variant/40 pt-4">
+          <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)}>
+            <p className="border-t border-outline-variant/40 pt-4 text-xs font-bold uppercase tracking-wider text-primary-container">Authority action</p>
+            <div className="flex flex-wrap gap-2">
               <button type="button" disabled={!allowed || busy !== null} onClick={() => void act(decision.id, "APPROVED")} className={portalPrimaryButton}>
-                Approve {decision.recommendation.action}
+                Approve {decision.recommendation.action === "REROUTE" ? `reroute via Route ${decision.recommendation.routeId}` : decision.recommendation.action}
               </button>
               <button type="button" disabled={!allowed || busy !== null} onClick={() => void act(decision.id, "VERIFICATION_REQUESTED")} className={portalSecondaryButton}>
                 Request verification
@@ -62,7 +64,7 @@ export function ApprovalsPage() {
         <section className="space-y-4" aria-label="Acted decisions">
           <h2 className="text-sm font-bold uppercase tracking-wide text-primary-container">Acted on</h2>
           {acted.map((decision) => (
-            <DecisionCard key={decision.id} decision={decision}>
+            <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)}>
               {decision.status === "VERIFICATION_REQUESTED" && (
                 <div className="flex flex-wrap gap-2 border-t border-outline-variant/40 pt-4">
                   <button type="button" disabled={!allowed || busy !== null} onClick={() => void act(decision.id, "APPROVED")} className={portalPrimaryButton}>

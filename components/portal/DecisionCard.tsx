@@ -1,12 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { Badge, Card, CardHeader, WhyList, actionTone, decisionStatusTone, feasibilityTone, labelize } from "@/components/portal/ui";
+import { MissionIdentity, RouteFeasibilityBlock, actionClass, decisionLabel, missionPosition } from "@/components/portal/MissionStory";
+import { Badge, Card, CardHeader, WhyList, actionTone, decisionStatusTone, feasibilityTone, impactTone, labelize } from "@/components/portal/ui";
 import { formatClock, formatStamp } from "@/lib/scenario/format";
 import { getPlace, getRoute } from "@/lib/scenario/seed/nh29";
 import type { DecisionRecord } from "@/lib/scenario/types";
+import type { MissionView } from "@/lib/scenario/view";
 
-export function DecisionCard({ decision, showMission = true, children }: { decision: DecisionRecord; showMission?: boolean; children?: React.ReactNode }) {
+export function DecisionCard({
+  decision,
+  mission = null,
+  showMission = true,
+  children,
+}: {
+  decision: DecisionRecord;
+  mission?: MissionView | null;
+  showMission?: boolean;
+  children?: React.ReactNode;
+}) {
   const rec = decision.recommendation;
   const route = rec.routeId ? getRoute(rec.routeId) : null;
   return (
@@ -16,9 +28,12 @@ export function DecisionCard({ decision, showMission = true, children }: { decis
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono">{decision.id}</span>
             {showMission && (
-              <Link href={`/missions/${decision.missionId}`} className="text-secondary hover:underline">
-                {decision.missionId}
-              </Link>
+              <>
+                <span aria-hidden="true">·</span>
+                <Link href={`/missions/${decision.missionId}`} className="text-secondary hover:underline">
+                  {decision.missionId}
+                </Link>
+              </>
             )}
             <Badge tone={actionTone(rec.action)}>
               {rec.action}
@@ -32,6 +47,38 @@ export function DecisionCard({ decision, showMission = true, children }: { decis
         }`}
       />
       <div className="space-y-4 p-4 sm:p-5">
+        {mission && (
+          <div data-decision-mission={mission.mission.id} className="grid grid-cols-1 gap-3 rounded-xs border border-outline-variant/50 bg-surface-container-low p-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+              <MissionIdentity mission={mission} />
+              <p className="mt-1 text-xs text-on-surface-variant">Current position: {missionPosition(mission)}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Mission impact</dt>
+                <dd className="mt-0.5">
+                  <Badge tone={impactTone(mission.impact.level)}>{mission.impact.level}</Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Decision</dt>
+                <dd className="mt-0.5">
+                  <span className={`inline-block rounded-xs px-1.5 py-0.5 text-[0.6875rem] font-extrabold uppercase ${actionClass(rec.action)}`}>{decisionLabel(decision)}</span>
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Feasibility</dt>
+                <dd className="mt-0.5">
+                  <Badge tone={feasibilityTone(rec.feasibility)}>{rec.feasibility}</Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold uppercase tracking-wider text-on-surface-variant">ETA</dt>
+                <dd className="mt-0.5 font-mono text-sm">{rec.etaAt ? formatClock(rec.etaAt) : "—"}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
         <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
           <div>
             <dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Feasibility</dt>
@@ -54,11 +101,12 @@ export function DecisionCard({ decision, showMission = true, children }: { decis
             <dd className="mt-1 font-semibold">{rec.followUp.length ? rec.followUp.join(" / ") : "—"}</dd>
           </div>
         </dl>
-        {rec.noVerifiedFeasibleRoute && (
+        {rec.noVerifiedFeasibleRoute && !mission && (
           <p className="rounded-xs border border-error/40 bg-error-container px-3 py-2 text-sm font-bold text-on-error-container">
             NO CURRENTLY VERIFIED FEASIBLE ROUTE — within the currently assessed network, evidence and constraints. This is a valid operational outcome, not a failure to compute.
           </p>
         )}
+        {mission && <RouteFeasibilityBlock decision={decision} vehicle={mission.vehicle} />}
         <WhyList items={rec.why} />
         {rec.instruction && (
           <p className="text-xs text-on-surface-variant">

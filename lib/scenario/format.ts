@@ -1,7 +1,7 @@
 const locale = "en-IN";
 
-export function formatClock(value: number): string {
-  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+export function formatClock(value: number, withSeconds = false): string {
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", ...(withSeconds ? { second: "2-digit" } : {}), hour12: false }).format(new Date(value));
 }
 
 export function formatStamp(value: number): string {

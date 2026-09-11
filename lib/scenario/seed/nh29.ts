@@ -214,7 +214,7 @@ export const vehicles: Vehicle[] = [
 export const missions: Mission[] = [
   {
     id: "M-101",
-    cargo: "Critical medicines",
+    cargo: "Emergency medicines",
     cargoDetail: "Cold-chain vaccines and ICU consumables",
     vehicleId: "V-HCV-16W",
     originPlaceId: "dimapur",
