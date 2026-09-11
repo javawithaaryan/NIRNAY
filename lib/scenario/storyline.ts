@@ -93,14 +93,18 @@ export function responseTimeline(state: PortalState): TimelineStep[] {
       const group: DecisionGroupItem[] = [];
       while (index < events.length && events[index].payload.type === "decision.recommended") {
         const item = events[index].payload as Extract<PortalEvent["payload"], { type: "decision.recommended" }>;
-        group.push({ missionId: item.decision.missionId, reassessment: Boolean(item.decision.reassessmentOf) });
+        group.push({ missionId: item.decision.missionId, reassessment: Boolean(item.decision.reassessmentOf), routeId: item.decision.recommendation.routeId });
         index += 1;
       }
+      const rerouted = group.filter((item) => item.routeId);
       if (group.some((item) => !item.reassessment)) {
         steps.push({ key: `${event.id}-m`, label: `${group.length} mission${group.length === 1 ? "" : "s"} affected`, detail: group.map((item) => item.missionId).join(" · "), at: event.at });
-        steps.push({ key: `${event.id}-r`, label: "Route feasibility complete", detail: "routes + vehicle constraints · hard constraints before ranking", at: event.at });
+        steps.push({ key: `${event.id}-r`, label: "Routes re-evaluated", detail: "per mission and vehicle · hard constraints before ranking", at: event.at });
       }
-      steps.push({ key: `${event.id}-d`, label: `${group.length} mission response${group.length === 1 ? "" : "s"} prepared`, detail: group.map((item) => item.missionId).join(" · "), at: event.at });
+      if (rerouted.length) {
+        steps.push({ key: `${event.id}-a`, label: "Alternative route found", detail: rerouted.map((item) => `${item.missionId} → Route ${item.routeId}`).join(" · "), at: event.at });
+      }
+      steps.push({ key: `${event.id}-d`, label: `${group.length} mission strateg${group.length === 1 ? "y" : "ies"} prepared`, detail: group.map((item) => item.missionId).join(" · "), at: event.at });
       continue;
     } else if (payload.type === "decision.acted") {
       const decision = state.decisions[payload.decisionId];
@@ -113,7 +117,7 @@ export function responseTimeline(state: PortalState): TimelineStep[] {
   return steps;
 }
 
-type DecisionGroupItem = { missionId: string; reassessment: boolean };
+type DecisionGroupItem = { missionId: string; reassessment: boolean; routeId: string | null };
 
 export type RouteCheck = { ok: boolean | null; label: string };
 
@@ -148,9 +152,11 @@ export function routeVerdict(evaluation: RouteEvaluation, vehicle: Vehicle): Rou
     headline = "INFEASIBLE · DEADLINE";
     reason = evaluation.reasons.find((item) => item.text.includes("misses the mission deadline"))?.text ?? "Deadline cannot be met";
   } else if (evaluation.feasibility === "UNDETERMINED") {
+    const highRisk = evaluation.reasons.some((item) => item.ok === null && item.text.includes("HIGH RISK"));
     glyph = "⚠️";
-    headline = "UNDETERMINED";
-    reason = stale ? `Evidence stale · last verified ${stale} ago` : uncertain?.text ?? "Segment condition unverified";
+    headline = highRisk ? "HIGH RISK · UNDETERMINED" : "UNDETERMINED";
+    reason = [stale ? `evidence stale (last verified ${stale} ago)` : null, highRisk ? "terrain condition uncertain" : null].filter(Boolean).join(" · ") || (uncertain?.text ?? "segment condition unverified");
+    reason = reason.charAt(0).toUpperCase() + reason.slice(1);
   } else {
     glyph = "✅";
     headline = `FEASIBLE FOR ${vehicle.vehicleClass}`;

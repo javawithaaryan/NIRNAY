@@ -6,8 +6,6 @@ import { CargoIcon, actionClass, decisionLabel } from "@/components/portal/Missi
 import { routeVerdict } from "@/lib/scenario/storyline";
 import type { PortalView } from "@/lib/scenario/view";
 
-const inputs = ["Incident severity", "Mission cargo", "Mission priority", "Deadline", "Vehicle class", "Route states", "Evidence freshness"];
-
 export function ResponseSynthesisHero({ view }: { view: PortalView }) {
   const decided = view.missions.filter((mission) => mission.activeDecision);
   if (decided.length === 0) return null;
@@ -32,6 +30,18 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
           .join(" and ")} cannot use it because of the vehicle restriction (${summary.restricted[0].verdict.reason.split(";")[0]}).`,
     );
   const noneFeasible = routeSummaries.every((summary) => summary.feasibleFor.length === 0);
+  const affectedCount = view.missions.filter((mission) => mission.impact.affectedSegmentIds.length > 0).length;
+  const verified = view.incidents.filter((item) => item.incident.verifiedAt).length;
+  const strategy = [
+    { label: "Incident", value: verified ? "verified" : "pending" },
+    { label: "Network", value: blocked.length ? `${blocked.join(" + ")} blocked` : "unchanged" },
+    { label: "Mission impact", value: `${affectedCount} missions affected` },
+    { label: "Vehicle constraints", value: "checked" },
+    { label: "Alternative routes", value: "evaluated" },
+    { label: "Deadlines", value: "checked" },
+    { label: "Current evidence", value: "checked" },
+    { label: "Strategy", value: "prepared" },
+  ];
   const synthesis = sentences.length
     ? sentences.join(" ")
     : noneFeasible
@@ -46,25 +56,19 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
           AI-assisted response synthesis
         </p>
         <p className="text-xs text-on-primary/80">
-          Combining the verified incident, evidence state, mission context and network constraints to prepare mission-specific response options.
+          Combining verified incident status, evidence freshness, mission requirements, vehicle constraints and available routes to prepare response options.
         </p>
       </div>
 
       <div className="space-y-4 p-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
-          <p>
-            <span className="font-bold uppercase tracking-wider text-on-surface-variant">Verified incident </span>
-            <span className="text-sm font-black uppercase text-error">{blocked.length ? blocked.map((corridor) => `${corridor} → BLOCKED`).join(" · ") : "Network change pending"}</span>
-          </p>
-          <p className="flex flex-wrap items-center gap-1.5">
-            <span className="font-bold uppercase tracking-wider text-on-surface-variant">Inputs considered</span>
-            {inputs.map((input) => (
-              <span key={input} className="rounded-xs border border-success-outline bg-success-container/50 px-1.5 py-0.5 font-semibold text-success">
-                ✓ {input}
-              </span>
-            ))}
-          </p>
-        </div>
+        <ol data-strategy-build className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wide">
+          {strategy.map((item) => (
+            <li key={item.label} className="arrive rounded-xs border border-success-outline bg-success-container/60 px-2 py-0.5 text-success">
+              ✓ {item.label} <span className="text-primary-container">{item.value}</span>
+            </li>
+          ))}
+          <li className="rounded-xs bg-primary-container px-2 py-0.5 text-on-primary">→ Response options ready</li>
+        </ol>
 
         <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3" aria-label="Mission-specific responses">
           {decided.map((mission) => {
@@ -81,6 +85,11 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
                   <Badge tone={priorityTone(mission.mission.priority)}>{mission.mission.priority}</Badge>
                   <Badge tone="neutral">{mission.vehicle.name}</Badge>
                   <Badge tone={impactTone(mission.impact.level)}>Impact {mission.impact.level}</Badge>
+                </p>
+                <p data-response-result className={`font-black uppercase ${decision.recommendation.routeId ? "text-secondary" : "text-on-error-container"}`}>
+                  {decision.recommendation.routeId
+                    ? `Route ${decision.recommendation.routeId} feasible — alternative route found`
+                    : `No feasible verified ${{ HCV: "heavy-vehicle", MCV: "medium-vehicle", LMV: "light-vehicle" }[mission.vehicle.vehicleClass]} route`}
                 </p>
                 <div>
                   <p className="font-bold uppercase tracking-wider text-on-surface-variant">Deterministic feasibility result</p>
@@ -113,9 +122,20 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
             <p className="mt-1 text-sm font-black uppercase text-secondary">Therefore: same disruption ≠ same decision</p>
           </div>
         </div>
-        <p className="rounded-xs border border-outline-variant/60 bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
-          AI summarizes the evidence and operational situation. <b>Deterministic feasibility rules</b> produce the route result. <b>Authority approval</b> is required before execution.
-        </p>
+        <dl data-roles className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+          <div className="rounded-xs border border-secondary/30 bg-secondary-container/20 px-3 py-2">
+            <dt className="font-bold uppercase tracking-wider text-secondary">AI</dt>
+            <dd>Summarizes evidence and operational context.</dd>
+          </div>
+          <div className="rounded-xs border border-outline-variant/60 bg-surface-container-low px-3 py-2">
+            <dt className="font-bold uppercase tracking-wider text-primary-container">Deterministic engine</dt>
+            <dd>Checks actual feasibility — hard constraints first.</dd>
+          </div>
+          <div className="rounded-xs border border-success-outline bg-success-container/40 px-3 py-2">
+            <dt className="font-bold uppercase tracking-wider text-success">Authority</dt>
+            <dd>Approves or rejects before anything moves.</dd>
+          </div>
+        </dl>
       </div>
     </section>
   );

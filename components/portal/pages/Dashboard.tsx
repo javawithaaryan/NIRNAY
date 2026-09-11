@@ -8,7 +8,9 @@ import { CorridorMapLibre } from "@/components/portal/CorridorMapLibre";
 import { DecisionStrip } from "@/components/portal/DecisionStrip";
 import { FeasibilityMatrix } from "@/components/portal/FeasibilityMatrix";
 import { IncidentIntelligenceHero } from "@/components/portal/IncidentIntelligenceHero";
+import { DataSourcesPanel } from "@/components/portal/DataSourcesPanel";
 import { ResponseSynthesisHero } from "@/components/portal/ResponseSynthesisHero";
+import { RouteReevaluationPanel } from "@/components/portal/RouteReevaluationPanel";
 import { ResponseActionsPanel } from "@/components/portal/ResponseActionsPanel";
 import { ResponseSynthesisPanel } from "@/components/portal/ResponseSynthesisPanel";
 import { RegionOrientation } from "@/components/portal/RegionOrientation";
@@ -19,10 +21,13 @@ import { portalPrimaryButton } from "@/components/portal/ui";
 import { usePortalView } from "@/components/portal/usePortalView";
 import { sessionActor, useSession } from "@/lib/auth/session";
 import { portalActions } from "@/lib/scenario/actions";
+import { useDemoMode } from "@/lib/demoMode";
 import type { EffectiveSegment } from "@/lib/scenario/engine/network";
 import { formatStamp } from "@/lib/scenario/format";
 import { responseTimeline } from "@/lib/scenario/storyline";
-import { usePortalState } from "@/lib/scenario/store";
+import { presenterStepKey } from "@/lib/scenario/presenter";
+import { useMeta, usePortalState } from "@/lib/scenario/store";
+import type { MissionView } from "@/lib/scenario/view";
 
 export function Dashboard() {
   const view = usePortalView();
@@ -31,13 +36,21 @@ export function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const demoMode = useDemoMode();
+  const presenterStep = useMeta(presenterStepKey);
+  const stage = demoMode ? Number(presenterStep ?? 0) : 99;
+  const routesRevealed = !(stage === 5 || stage === 6);
+  const strategyRevealed = !(stage >= 5 && stage <= 7);
 
   if (!view || !state || !session) return <p className="text-sm text-on-surface-variant">Loading operational state…</p>;
 
   const selectedMission = view.missions.find((mission) => mission.mission.id === selectedMissionId) ?? null;
   const rerouting = view.missions.find((mission) => mission.activeDecision?.recommendation.action === "REROUTE" && mission.activeDecision.status !== "SUPERSEDED");
   const highlightRouteId =
-    selectedRouteId ?? selectedMission?.activeDecision?.recommendation.routeId ?? (selectedMission ? selectedMission.currentRouteId : null) ?? rerouting?.activeDecision?.recommendation.routeId ?? null;
+    selectedRouteId ??
+    selectedMission?.activeDecision?.recommendation.routeId ??
+    (selectedMission ? selectedMission.currentRouteId : null) ??
+    (routesRevealed ? (rerouting?.activeDecision?.recommendation.routeId ?? null) : null);
   const latestIncident = view.incidents[view.incidents.length - 1] ?? null;
 
   const reevaluate = async () => {
@@ -78,11 +91,9 @@ export function Dashboard() {
 
       <IncidentIntelligenceHero view={view} state={state} incidentView={latestIncident} session={session} />
 
-      <SituationSummary view={view} state={state} selectedMissionId={selectedMissionId} onSelectMission={selectMission} />
+      <SituationSummary view={view} state={state} selectedMissionId={selectedMissionId} onSelectMission={selectMission} decisionsRevealed={routesRevealed} />
 
       <ReassessmentAlert state={state} missions={view.missions} />
-
-      <ResponseSynthesisHero view={view} />
 
       <section id="operational-map" className="grid scroll-mt-20 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-label="Operational workspace">
         <div className="flex min-w-0 flex-col gap-3">
@@ -94,14 +105,21 @@ export function Dashboard() {
             selectedMissionId={selectedMissionId}
             onSelectMission={selectMission}
             heightClass="h-[420px] sm:h-[500px] xl:h-[560px]"
-            overlay={<NetworkChangeOverlay segments={view.segments} />}
+            decisionsRevealed={routesRevealed}
+            overlay={<NetworkChangeOverlay segments={view.segments} reroute={routesRevealed ? rerouting ?? null : null} />}
           />
           <TimelineList steps={responseTimeline(state).slice(-8)} title="Live response timeline · latest" emptyText="Waiting for a field incident." />
         </div>
         <div className="flex flex-col gap-3">
           <RegionOrientation />
+          <DataSourcesPanel state={state} />
         </div>
       </section>
+
+      <RouteReevaluationPanel view={view} revealed={routesRevealed} />
+
+      {strategyRevealed && <ResponseSynthesisHero view={view} />}
+
 
       <Disclosure id="feasibility" title="View route comparison" subtitle="Route × mission feasibility with hard constraints, evidence freshness and route state">
         <FeasibilityMatrix
@@ -139,7 +157,7 @@ export function Dashboard() {
   );
 }
 
-function NetworkChangeOverlay({ segments }: { segments: EffectiveSegment[] }) {
+function NetworkChangeOverlay({ segments, reroute }: { segments: EffectiveSegment[]; reroute: MissionView | null }) {
   const blocked = segments.filter((segment) => segment.effectiveState === "BLOCKED");
   const degraded = segments.filter((segment) => segment.effectiveState !== "OPEN" && segment.effectiveState !== "BLOCKED");
   return (
@@ -153,6 +171,11 @@ function NetworkChangeOverlay({ segments }: { segments: EffectiveSegment[] }) {
             {segment.segment.name}: <span className="text-success">OPEN</span> → <span className="font-black text-error">BLOCKED</span>
           </p>
         ))
+      )}
+      {reroute?.activeDecision?.recommendation.routeId && (
+        <p data-map-reroute className="mt-1 rounded-xs bg-secondary px-1.5 py-0.5 font-bold text-on-primary">
+          REROUTE · {reroute.mission.id} {reroute.mission.cargo.toLowerCase()}: Route {reroute.mission.plannedRouteId} → Route {reroute.activeDecision.recommendation.routeId}
+        </p>
       )}
       {degraded.length > 0 && (
         <p className="mt-1 text-[0.6875rem] text-on-surface-variant">

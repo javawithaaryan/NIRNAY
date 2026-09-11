@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ArrowDown, ArrowRight, Bot, Check, Hourglass, Play, ShieldCheck } from "lucide-react";
 import { EvidencePhoto } from "@/components/portal/EvidencePhoto";
 import { Badge, SimulatedTag, portalDangerButton, portalPrimaryButton, portalSecondaryButton, type Tone } from "@/components/portal/ui";
@@ -18,22 +18,6 @@ type Props = { view: PortalView; state: PortalState; incidentView: IncidentView 
 
 const tierTone: Record<EvidenceTier, Tone> = { PRIMARY: "navy", CORROBORATING: "success", SUPPORTING: "info", CONTEXTUAL: "muted" };
 const severityTone: Record<SeverityTier, Tone> = { CRITICAL: "danger", HIGH: "danger", MODERATE: "warning", LOW: "muted" };
-
-function Step({ title, done, children }: { title: string; done: boolean; children: ReactNode }) {
-  return (
-    <div className="arrive">
-      <p className={`flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wider ${done ? "text-primary-container" : "text-outline"}`}>
-        {done ? <Check aria-hidden="true" className="size-3.5 text-success" /> : <Hourglass aria-hidden="true" className="size-3.5" />}
-        {title}
-      </p>
-      <div className="mt-0.5 pl-5 text-xs text-on-surface">{children}</div>
-    </div>
-  );
-}
-
-function Down() {
-  return <ArrowDown aria-hidden="true" className="ml-1 size-3.5 text-outline" />;
-}
 
 export function IncidentIntelligenceHero({ view, state, incidentView, session }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,12 +59,42 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
   );
   const essential = exposed.filter((mission) => mission.mission.priority !== "NORMAL");
   const whySeverity = [
-    incident.fullBlockage ? "Full carriageway obstruction" : "Partial restriction",
-    corridor === "NH-29" ? "Primary NH-29 corridor (Dimapur–Kohima artery)" : `${corridor} — secondary corridor`,
-    exposed.length ? `${essential.length ? "Essential logistics missions" : "Missions"} exposed — ${exposed.map((mission) => `${mission.mission.id} ${mission.mission.cargo.toLowerCase()}`).join(", ")}` : "No mission currently routed over this segment",
-    assessment.corroborated ? "Strong multi-source support" : "Corroboration still in progress",
+    `${severity.H >= 0.8 ? "High" : "Moderate"} hazard severity — ${incident.category.replace("-", " ")}`,
+    corridor === "NH-29" ? "Important NH-29 corridor (Dimapur–Kohima artery)" : `${corridor} — secondary corridor`,
+    incident.fullBlockage ? "Full carriageway blockage" : "Partial restriction",
+    `${severity.X >= 0.6 ? "Significant" : "Limited"} network disruption extent`,
   ];
+  const exposureNote = exposed.length ? `${essential.length ? "Essential missions" : "Missions"} exposed: ${exposed.map((mission) => `${mission.mission.id} ${mission.mission.cargo.toLowerCase()}`).join(", ")}` : null;
   const packageReady = Boolean(interpretation) && assessment.corroborated;
+  const evidenceAt = (...kinds: string[]) => evidence.filter((item) => kinds.includes(item.kind)).map((item) => item.capturedAt).sort((a, b) => b - a)[0] ?? null;
+  const aiTimes = state.events.filter((event) => event.payload.type === "ai.interpreted" && event.payload.interpretation.incidentId === incident.id).map((event) => event.at);
+  const nearby = evidence.find((item) => item.kind === "NEARBY_REPORT" || item.kind === "SECOND_REPORT");
+  const stages = [
+    { key: "ingest", title: "Ingest", detail: `Field report received · ${field?.fieldReportReference ?? "seeded report"}`, pending: "", done: true, at: incident.reportedAt },
+    { key: "classify", title: "Classify", detail: interpretation ? `Likely hazard: ${interpretation.hazard.label.toUpperCase()} · classification confidence ${Math.round(interpretation.confidence * 100)}%` : "", pending: "Awaiting AI classification", done: Boolean(interpretation), at: aiTimes[0] ?? null },
+    { key: "extract", title: "Extract", detail: "Visual / reported cues:", pending: "Cues not yet extracted", done: Boolean(interpretation), at: aiTimes[0] ?? null },
+    { key: "locate", title: "Locate", detail: assessment.L >= 0.7 ? `GPS matched to ${place} / ${corridor}` : "Location relocated onto the corridor for the demo", pending: "", done: Boolean(interpretation), at: aiTimes[0] ?? null },
+    { key: "crosscheck", title: "Cross-check", detail: nearby ? `Nearby report found · ${nearby.distanceKm ?? 0.5} km` : "", pending: "Searching nearby reports…", done: Boolean(nearby), at: evidenceAt("NEARBY_REPORT", "SECOND_REPORT") },
+    { key: "context", title: "Context check", detail: "Weather conditions assessed (simulated feed)", pending: "Weather context pending", done: has("WEATHER"), at: evidenceAt("WEATHER") },
+    { key: "institutional", title: "Institutional check", detail: "Disaster-alert context assessed (simulated feed)", pending: "Institutional context pending", done: has("INSTITUTIONAL"), at: evidenceAt("INSTITUTIONAL") },
+    { key: "operational", title: "Operational check", detail: "Logistics signal assessed (simulated feed)", pending: "Operational signal pending", done: has("LOGISTICS"), at: evidenceAt("LOGISTICS") },
+    { key: "synthesize", title: "Synthesize", detail: "Evidence converges on one incident", pending: "Waiting for converging evidence", done: assessment.corroborated, at: assessment.corroborated ? (aiTimes.at(-1) ?? null) : null },
+    { key: "assess", title: "Assess", detail: `Incident severity calculated · ${intel.severityTier}`, pending: "Severity pending", done: Boolean(interpretation), at: aiTimes.at(-1) ?? null },
+    { key: "prepare", title: "Prepare", detail: "Verification package ready", pending: "Package not ready", done: packageReady, at: packageReady ? (aiTimes.at(-1) ?? null) : null },
+  ];
+  const supportingSignals = count("CORROBORATING") + count("SUPPORTING");
+  const crossSource = [
+    { label: "Nearby report agrees", ok: has("NEARBY_REPORT", "SECOND_REPORT") },
+    { label: "Weather context is consistent", ok: has("WEATHER") },
+    { label: "Institutional context supports", ok: has("INSTITUTIONAL") },
+    { label: "Logistics signal indicates operational impact", ok: has("LOGISTICS") },
+    { label: "Historical context is relevant", ok: has("HISTORICAL", "NETWORK_RECORD") },
+  ];
+  const applyNetwork = () =>
+    act("network", async () => {
+      if (!segment || segment.recordedState === "BLOCKED") return;
+      await portalActions.changeSegmentState(sessionActor(session), incident.segmentId, "BLOCKED", `Verified incident ${incident.reference}: ${incident.note ?? incident.ai.label}`, incident.id);
+    });
   const networkChanged = segment ? segment.effectiveState === "BLOCKED" : false;
 
   return (
@@ -91,7 +105,7 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
             <Bot aria-hidden="true" className="size-5" />
             AI-assisted incident intelligence
           </p>
-          <p className="text-xs text-on-primary/80">Turning a field observation into a verification-ready evidence package.</p>
+          <p className="text-xs text-on-primary/80">Turning an unstructured field observation into a verification-ready intelligence package.</p>
         </div>
         <p className="text-right text-[0.6875rem] text-on-primary/80">
           <span className="font-mono font-bold text-on-primary">{incident.reference}</span> · {segment?.segment.name} ({corridor})
@@ -101,7 +115,7 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
 
       <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 xl:grid-cols-[15rem_minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-primary-container">Field report received</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary-container">Inputs received</p>
           <div className="aspect-[4/3] overflow-hidden rounded-xs border border-outline-variant/60 bg-surface-container-high">
             {field?.photo?.kind === "field-db" ? (
               <EvidencePhoto reportId={field.photo.reportId} />
@@ -114,60 +128,45 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
             <li>📍 {formatCoordinates(field?.originalLat ?? incident.lat, field?.originalLon ?? incident.lon)}{field?.accuracyM ? ` · ±${Math.round(field.accuracyM)} m` : ""}</li>
             <li>🕒 {formatStamp(incident.reportedAt)}</li>
             <li>📝 “{incident.note ?? "no note"}”</li>
+            <li className="font-bold uppercase">Type: {incident.category}</li>
           </ul>
           <p className="text-[0.6875rem] text-on-surface-variant">
             {field?.fieldReportReference ?? "Seeded"} · {field?.origin === "FIELD" ? "field data" : "demo data"} · reporter identity not verified
           </p>
         </div>
 
-        <div className="space-y-1.5 rounded-xs border border-outline-variant/50 bg-surface-container-low p-3" data-ai-decode>
-          <p className="text-xs font-bold uppercase tracking-wider text-primary-container">AI decodes the report</p>
-          <Step title="Raw observation" done>
-            “{incident.note ?? "—"}” · reported type {incident.category}
-          </Step>
-          <Down />
-          {!interpretation ? (
-            <div className="rounded-xs border border-warning-outline bg-warning-container/50 p-2 text-xs text-warning">
-              <p className="font-bold uppercase tracking-wider">AI analysis starting…</p>
-              <button type="button" data-ai-run disabled={busy !== null} onClick={() => void act("ai", () => interpretIncident(incident.id))} className={`${portalPrimaryButton} mt-1.5`}>
-                <Play aria-hidden="true" className="size-4" />
-                {busy === "ai" ? "Analysing…" : "Run AI analysis"}
-              </button>
-            </div>
-          ) : (
-            <>
-              <Step title="Hazard classification" done>
-                <span className="text-base font-black uppercase text-primary-container">{interpretation.hazard.label}</span>
-                <span className="ml-2 text-on-surface-variant">
-                  classification confidence <b data-ai-confidence>{Math.round(interpretation.confidence * 100)}%</b>
+        <div className="rounded-xs border border-outline-variant/50 bg-surface-container-low p-3" data-ai-decode>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary-container">AI analysis stages</p>
+          <ol className="mt-2 space-y-1.5">
+            {stages.map((stage, index) => (
+              <li key={stage.key} data-ai-stage={stage.key} data-ai-stage-done={stage.done} className="arrive grid grid-cols-[1.75rem_minmax(0,1fr)] gap-1.5 text-xs">
+                <span className={`flex size-6 items-center justify-center rounded-full font-mono text-[0.625rem] font-bold ${stage.done ? "bg-success text-on-primary" : "border border-outline-variant text-outline"}`}>
+                  {String(index + 1).padStart(2, "0")}
                 </span>
-              </Step>
-              <Down />
-              <Step title="Observed conditions" done={cues.length > 0}>
-                <ul>
-                  {cues.map((cue) => (
-                    <li key={cue.text}>✓ {cue.text}</li>
-                  ))}
-                  {interpretation.laneObstruction.assessment === "FULL" && <li>✓ possible full carriageway blockage</li>}
-                </ul>
-              </Step>
-              <Down />
-              <Step title="Location context" done={assessment.L >= 0.7}>
-                {assessment.L >= 0.7 ? `✓ ${place} / ${corridor} corridor` : "⚠ location uncertain / relocated for the demo"}
-              </Step>
-              <Down />
-              <Step title="Temporal context" done={assessment.T >= 0.8}>
-                {assessment.T >= 0.8 ? "✓ recent field observation" : "⚠ observation ageing"}
-              </Step>
-              <Down />
-              <div className="arrive rounded-xs border border-primary-container/30 bg-surface-container-lowest p-2">
-                <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Incident profile</p>
-                <p className="text-sm font-black uppercase text-primary-container">
-                  {interpretation.hazard.label} · {interpretation.laneObstruction.assessment === "FULL" ? "full roadway obstruction" : "roadway obstruction"} · {corridor} · {assessment.T >= 0.8 ? "current observation" : "ageing observation"}
-                </p>
-              </div>
-            </>
-          )}
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className={`font-bold uppercase tracking-wide ${stage.done ? "text-primary-container" : "text-outline"}`}>{stage.title}</span>
+                    {stage.at && <span className="font-mono text-[0.625rem] text-on-surface-variant">{formatClock(stage.at, true)}</span>}
+                  </span>
+                  <span className={`block ${stage.done ? "text-on-surface" : "text-outline"}`}>{stage.done ? stage.detail : stage.pending}</span>
+                  {stage.key === "extract" && stage.done && cues.length > 0 && (
+                    <ul className="text-[0.6875rem] text-on-surface-variant">
+                      {cues.map((cue) => (
+                        <li key={cue.text}>✓ {cue.text}</li>
+                      ))}
+                      {interpretation?.laneObstruction.assessment === "FULL" && <li>✓ possible full carriageway blockage</li>}
+                    </ul>
+                  )}
+                  {stage.key === "classify" && !interpretation && (
+                    <button type="button" data-ai-run disabled={busy !== null} onClick={() => void act("ai", () => interpretIncident(incident.id))} className={`${portalPrimaryButton} mt-1`}>
+                      <Play aria-hidden="true" className="size-4" />
+                      {busy === "ai" ? "Analysing…" : "Run AI analysis"}
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
         </div>
 
         <div className="space-y-3">
@@ -202,6 +201,16 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
                 ))}
             </ul>
           </div>
+          <div data-cross-source className="rounded-xs border border-outline-variant/50 bg-surface-container-low p-2 text-xs">
+            <p className="font-bold uppercase tracking-wider text-primary-container">Cross-source consistency</p>
+            <ul className="mt-0.5 space-y-0.5">
+              {crossSource.map((item) => (
+                <li key={item.label} className={item.ok ? "text-on-surface" : "text-outline"}>
+                  {item.ok ? "✓" : "⏳"} {item.label}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -224,6 +233,9 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
           </svg>
           <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
             <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Evidence convergence</p>
+            <p data-convergence-count className="text-xs font-bold text-primary-container">
+              {supportingSignals} of {evidence.length - 1} signals corroborate or support · {count("CONTEXTUAL")} contextual
+            </p>
             <p className={`text-sm font-black uppercase ${assessment.corroborated ? "text-success" : "text-secondary"}`}>{assessment.corroborated ? "Multiple signals agree" : "Signals arriving…"}</p>
             <ArrowDown aria-hidden="true" className="size-4 text-outline" />
             <p className="text-sm font-black uppercase text-primary-container">{hazard} / road obstruction</p>
@@ -240,7 +252,7 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
           <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
             <div>
               <dt className="font-bold uppercase tracking-wider text-on-surface-variant">AI classification confidence</dt>
-              <dd className="text-lg font-black text-primary-container">{interpretation ? `${Math.round(interpretation.confidence * 100)}%` : "—"}</dd>
+              <dd className="text-lg font-black text-primary-container">{interpretation ? <span data-ai-confidence>{Math.round(interpretation.confidence * 100)}%</span> : "—"}</dd>
             </div>
             <div>
               <dt className="font-bold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt>
@@ -263,7 +275,7 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
 
           <div data-severity className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-3">
             <p className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary-container">
-              Incident assessment <Badge tone={severityTone[intel.severityTier]}>{intel.severityTier}</Badge>
+              AI-assisted incident assessment <Badge tone={severityTone[intel.severityTier]}>{intel.severityTier}</Badge>
             </p>
             <p className="mt-1 text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Why {intel.severityTier.toLowerCase()}?</p>
             <ul className="mt-0.5 space-y-0.5 text-xs">
@@ -271,8 +283,22 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
                 <li key={line}>✓ {line}</li>
               ))}
             </ul>
+            {exposureNote && <p className="mt-1 text-[0.6875rem] text-on-surface-variant">{exposureNote}. Severity is operational seriousness — evidence strength is scored separately (E).</p>}
+            <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[0.6875rem]">
+              {intel.severityFactors.map((factor) => (
+                <li key={factor.key}>
+                  <span className="flex justify-between gap-1">
+                    <span className="font-semibold text-on-surface">{factor.label}</span>
+                    <span className="font-mono font-bold text-primary-container">{Math.round(factor.value * 100)}%</span>
+                  </span>
+                  <span className="mt-0.5 block h-1 overflow-hidden rounded-full bg-surface-container-high">
+                    <span className="block h-full rounded-full bg-error" style={{ width: `${Math.round(factor.value * 100)}%` }} />
+                  </span>
+                </li>
+              ))}
+            </ul>
             <details className="mt-1 text-[0.6875rem] text-on-surface-variant">
-              <summary className="cursor-pointer font-semibold text-secondary">Detail</summary>
+              <summary className="cursor-pointer font-semibold text-secondary">View calculation</summary>
               {intel.severityFactors.map((factor) => (
                 <p key={factor.key}>
                   {factor.key}: {factor.label.toLowerCase()} {factor.value.toFixed(2)} × {factor.weight} — {factor.why}
@@ -286,36 +312,49 @@ export function IncidentIntelligenceHero({ view, state, incidentView, session }:
 
       <div className="border-t border-outline-variant/40 p-4 sm:p-5">
         {incident.verifiedAt ? (
-          <div data-handoff className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-            <div className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-3 text-xs">
-              <p className="font-bold uppercase tracking-wider text-primary-container">AI analysis</p>
-              <p>✓ Analysis complete</p>
-              <p>✓ Corroboration complete</p>
-              <p className="font-semibold text-secondary">→ Handoff to officer</p>
-            </div>
-            <ArrowRight aria-hidden="true" className="hidden size-5 self-center text-outline md:block" />
-            <div className="rounded-xs border border-success-outline bg-success-container/60 p-3 text-xs text-success">
-              <p className="font-bold uppercase tracking-wider">Authorized officer verification</p>
-              <p data-verified-line className="font-bold">
-                <ShieldCheck aria-hidden="true" className="mr-1 inline size-4 align-text-bottom" />
-                VERIFIED BY AUTHORIZED OFFICER · {formatStamp(incident.verifiedAt)} · {incident.verifiedBy?.name}
-              </p>
-            </div>
-            <ArrowRight aria-hidden="true" className="hidden size-5 self-center text-outline md:block" />
-            <div className={`rounded-xs border p-3 text-xs ${networkChanged ? "border-error/40 bg-error-container/40" : "border-outline-variant/60 bg-surface-container-low"}`}>
-              <p className="font-bold uppercase tracking-wider text-primary-container">Network update</p>
-              <p className="font-bold">{networkChanged ? `${corridor} · ${segment?.segment.name}: OPEN → BLOCKED` : "Pending — officer applies the network change"}</p>
-            </div>
+          <div data-handoff className="space-y-2">
+            <ol className="grid grid-cols-1 gap-2 text-xs md:grid-cols-4">
+              <li className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-2.5">
+                <p className="font-bold uppercase tracking-wider text-primary-container">✓ AI analysis complete</p>
+                <p className="text-on-surface-variant">{interpretation ? `${interpretation.hazard.label.toLowerCase()} · ${Math.round(interpretation.confidence * 100)}%` : "—"}</p>
+              </li>
+              <li className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-2.5">
+                <p className="font-bold uppercase tracking-wider text-primary-container">✓ Evidence package ready</p>
+                <p className="text-on-surface-variant">
+                  {evidence.length} items · E = {assessment.E.toFixed(2)}
+                </p>
+              </li>
+              <li className="rounded-xs border border-success-outline bg-success-container/60 p-2.5 text-success">
+                <p className="font-bold uppercase tracking-wider">Official incident status · ✓ verified</p>
+                <p data-verified-line className="font-bold">
+                  <ShieldCheck aria-hidden="true" className="mr-1 inline size-4 align-text-bottom" />
+                  VERIFIED BY AUTHORIZED OFFICER · {formatStamp(incident.verifiedAt)} · {incident.verifiedBy?.name}
+                </p>
+              </li>
+              <li className={`rounded-xs border p-2.5 ${networkChanged ? "border-error/40 bg-error-container/40" : "border-outline-variant/60 bg-surface-container-low"}`}>
+                <p className="font-bold uppercase tracking-wider text-primary-container">{networkChanged ? "✓ Network response activated" : "Network response next"}</p>
+                {networkChanged ? (
+                  <p className="font-semibold">{`${corridor} · ${segment?.segment.name}: OPEN → BLOCKED`}</p>
+                ) : (
+                  <button type="button" data-apply-network disabled={busy !== null} onClick={() => void applyNetwork()} className={`${portalPrimaryButton} mt-1`}>
+                    {busy === "network" ? "Applying…" : `Apply network change · ${corridor} → BLOCKED`}
+                  </button>
+                )}
+              </li>
+            </ol>
+            <p className="text-[0.6875rem] text-on-surface-variant">AI prepared the evidence. The authorized officer made the official verification.</p>
           </div>
         ) : incident.rejectedAt ? (
           <p className="rounded-xs border border-error/30 bg-error-container px-3 py-2 text-xs font-bold text-on-error-container">Rejected by officer · {formatStamp(incident.rejectedAt)}</p>
         ) : (
           <div data-verification-package className={`rounded-xs border p-3 ${packageReady ? "border-success-outline bg-success-container/30" : "border-outline-variant/60 bg-surface-container-low"}`}>
-            <p className={`text-sm font-black uppercase tracking-wide ${packageReady ? "text-success" : "text-secondary"}`}>{packageReady ? "Verification package ready" : "Preparing verification package…"}</p>
+            <p className={`text-sm font-black uppercase tracking-wide ${packageReady ? "text-success" : "text-secondary"}`}>
+              {packageReady ? "✓ AI analysis complete · ✓ evidence package ready · officer verification required" : "Preparing verification package…"}
+            </p>
             <dl className="mt-2 grid grid-cols-2 gap-3 text-xs md:grid-cols-5">
               <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Incident</dt><dd className="font-semibold">{hazard} — {place} / {corridor}</dd></div>
-              <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Evidence</dt><dd className="font-semibold">{evidence.length} items · {evidence.length - 1} supporting signals</dd></div>
-              <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">AI interpretation</dt><dd className="font-semibold">{interpretation ? `Consistent with ${interpretation.hazard.label.toLowerCase()}` : "pending"}</dd></div>
+              <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Evidence</dt><dd className="font-semibold">{evidence.length} items · {supportingSignals} corroborating / supporting signals</dd></div>
+              <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">AI assessment</dt><dd className="font-semibold">{interpretation ? `${interpretation.hazard.label} · ${Math.round(interpretation.confidence * 100)}% classification confidence` : "pending"}</dd></div>
               <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Severity</dt><dd className="font-semibold">{intel.severityTier}</dd></div>
               <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Network impact</dt><dd className="font-semibold">{corridor} segment affected</dd></div>
             </dl>

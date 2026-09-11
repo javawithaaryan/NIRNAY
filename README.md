@@ -86,6 +86,16 @@ Everything works without configuration. Optional build-time variables (see `.env
 
 Secret API keys never go in the browser — the AI endpoint is expected to be your own backend that holds them. The MapTiler key is a public browser key by design; restrict it to your deployment domain in the MapTiler dashboard.
 
+## Data sources
+
+| Source | Status in this prototype |
+|---|---|
+| Field reports | Live — stored on the reporting device (IndexedDB) and handed to the control room by a local event bridge |
+| Disaster alerts | Official SACHET (NDMA) CAP feed fetched live through `/api/sources/sachet`; shown as regional context. The reconstructed incident's institutional evidence remains simulated |
+| Weather | Simulated — IMD APIs require IP whitelisting |
+| Logistics signals | Simulated |
+| Historical context | Seeded scenario record |
+
 ## Deploying
 
 The app is a standard Next.js project with no server-side dependencies.

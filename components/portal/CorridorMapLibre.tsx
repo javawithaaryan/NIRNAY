@@ -26,6 +26,7 @@ type Props = {
   onSelectMission?: (missionId: string) => void;
   heightClass?: string;
   overlay?: ReactNode;
+  decisionsRevealed?: boolean;
 };
 
 type BasemapMode = "vector" | "osm" | "plain";
@@ -116,6 +117,7 @@ export function CorridorMapLibre({
   onSelectMission,
   heightClass = "h-[560px]",
   overlay,
+  decisionsRevealed = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -235,6 +237,28 @@ export function CorridorMapLibre({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !ready || !highlightRouteId || !map.getLayer("segments-highlight")) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const elapsed = (now - start) / 1000;
+      if (elapsed > 2.4) {
+        map.setPaintProperty("segments-highlight", "line-opacity", 0.28);
+        map.setPaintProperty("segments-highlight", "line-width", 18);
+        return;
+      }
+      const pulse = 0.5 + 0.5 * Math.sin((elapsed * Math.PI * 2) / 0.8);
+      map.setPaintProperty("segments-highlight", "line-opacity", 0.2 + 0.4 * pulse);
+      map.setPaintProperty("segments-highlight", "line-width", 14 + 10 * pulse);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [highlightRouteId, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !ready) return;
     map.setLayoutProperty("osm", "visibility", basemap === "osm" ? "visible" : "none");
     for (const layer of vectorLayers) {
@@ -336,14 +360,17 @@ export function CorridorMapLibre({
       const selected = selectedMissionId === view.mission.id;
       const dot = el("", "size-3.5 rounded-full border-2 border-white shadow");
       dot.style.backgroundColor = tone;
-      add(missionLngLat(view), dot);
+      const rec = view.activeDecision?.recommendation;
+      const reroutedTo = rec?.action === "REROUTE" && view.activeDecision?.status === "APPROVED" && rec.routeId ? getRoute(rec.routeId).segmentIds.find((id) => !getRoute(view.mission.plannedRouteId).segmentIds.includes(id)) : null;
+      const position: LngLat = reroutedTo ? pointAlong(reroutedTo, 0.3) : missionLngLat(view);
+      add(position, dot);
       const callout = el(
-        `<div class="text-[11px] font-bold" style="color:${tone}">${escape(view.mission.id)} · ${escape(view.mission.cargo)}</div><div class="text-[10px] font-semibold text-on-surface">${escape(view.vehicle.vehicleClass)} · ${view.vehicle.grossTonnes} t · ${escape(view.mission.priority)}</div><div class="text-[10px] text-on-surface-variant">${escape(missionStateText(view))}</div>`,
+        `<div class="text-[11px] font-bold" style="color:${tone}">${escape(view.mission.id)} · ${escape(view.mission.cargo)}</div><div class="text-[10px] text-on-surface-variant"><b class="text-on-surface">${escape(view.vehicle.vehicleClass)} ${view.vehicle.grossTonnes} t · ${escape(view.mission.priority)}</b> · ${escape(decisionsRevealed || view.impact.affectedSegmentIds.length === 0 ? missionStateText(view) : "re-evaluating routes…")}</div>`,
         `cursor-pointer rounded-xs border bg-white px-2 py-1 shadow-md ${selected ? "ring-2 ring-secondary" : ""}`,
       );
       callout.style.borderColor = tone;
       callout.addEventListener("click", () => onSelectRef.current?.(view.mission.id));
-      add(missionLngLat(view), callout, "bottom-left", [26, -50 - index * 60]);
+      add(position, callout, "bottom-left", [26, -44 - index * 44]);
     });
 
     const divertMission = missions.find((view) => view.mission.id === selectedMissionId) ?? missions.find((view) => view.activeDecision?.recommendation.divertPlaceId);
@@ -367,7 +394,7 @@ export function CorridorMapLibre({
     }
 
     markersRef.current = markers;
-  }, [segments, incidents, missions, selectedMissionId, highlightRouteId, ready]);
+  }, [segments, incidents, missions, selectedMissionId, highlightRouteId, ready, decisionsRevealed]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-outline-variant/60 bg-surface-container-lowest">

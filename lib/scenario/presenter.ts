@@ -87,6 +87,7 @@ export const presenterSteps: PresenterStep[] = [
     href: "/dashboard",
     apply: async (actor) => {
       const id = await primaryIncidentId();
+      if ((await loadState()).network[primaryIncidentSeed.segmentId]?.state === "BLOCKED") return;
       await portalActions.changeSegmentState(
         actor,
         primaryIncidentSeed.segmentId,
@@ -97,8 +98,8 @@ export const presenterSteps: PresenterStep[] = [
     },
   },
   { n: 6, label: "Missions affected", description: "One network event fans out to three missions with different impact.", href: "/dashboard", anchor: "situation" },
-  { n: 7, label: "Route analysis", description: "Routes A, B and C compared per mission with vehicle-aware feasibility.", href: "/dashboard", anchor: "response-synthesis" },
-  { n: 8, label: "Decision", description: "Same disruption, different decisions — each with a WHY, plus the AI-assisted response synthesis.", href: "/dashboard", anchor: "situation" },
+  { n: 7, label: "Route analysis", description: "Live route re-evaluation: routes A, B and C checked per mission and vehicle; M-103 finds Route C.", href: "/dashboard", anchor: "route-reevaluation" },
+  { n: 8, label: "Decision", description: "Same disruption, different decisions — the AI-assisted response strategy, each with a WHY.", href: "/dashboard", anchor: "response-synthesis" },
   {
     n: 9,
     label: "Authority",

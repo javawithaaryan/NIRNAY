@@ -182,11 +182,21 @@ export function OperationalPriorityBlock({ mission }: { mission: MissionView }) 
   );
 }
 
-export function MissionImpactCards({ missions, selectedMissionId, onSelectMission }: { missions: MissionView[]; selectedMissionId?: string | null; onSelectMission?: (id: string) => void }) {
+export function MissionImpactCards({
+  missions,
+  selectedMissionId,
+  onSelectMission,
+  decisionsRevealed = true,
+}: {
+  missions: MissionView[];
+  selectedMissionId?: string | null;
+  onSelectMission?: (id: string) => void;
+  decisionsRevealed?: boolean;
+}) {
   return (
     <ul aria-label="Missions" className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {missions.map((mission) => {
-        const decision = mission.activeDecision;
+        const decision = decisionsRevealed ? mission.activeDecision : null;
         const affected = mission.impact.affectedSegmentIds.length > 0;
         const selected = selectedMissionId === mission.mission.id;
         return (
@@ -217,7 +227,7 @@ export function MissionImpactCards({ missions, selectedMissionId, onSelectMissio
                 {decision ? (
                   <span className={`mt-0.5 inline-block rounded-xs px-2 py-0.5 text-xs font-extrabold uppercase tracking-wide ${actionClass(decision.recommendation.action)}`}>{decisionLabel(decision)}</span>
                 ) : (
-                  <span className="mt-0.5 inline-block rounded-xs bg-success-container px-2 py-0.5 text-xs font-bold uppercase text-success">{affected ? "Assessing" : "On time · Route A"}</span>
+                  <span className={`mt-0.5 inline-block rounded-xs px-2 py-0.5 text-xs font-bold uppercase ${affected ? "bg-warning-container text-warning" : "bg-success-container text-success"}`}>{affected ? "⏳ Re-evaluating routes…" : "On time · Route A"}</span>
                 )}
                 {decision?.recommendation.noVerifiedFeasibleRoute && <p className="mt-1 text-[0.6875rem] font-bold text-on-error-container">NO CURRENTLY VERIFIED FEASIBLE ROUTE</p>}
                 {decision && <RouteLine decision={decision} vehicle={mission.vehicle} />}

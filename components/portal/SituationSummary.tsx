@@ -12,11 +12,12 @@ type Props = {
   state: PortalState;
   selectedMissionId: string | null;
   onSelectMission: (missionId: string) => void;
+  decisionsRevealed?: boolean;
 };
 
 const glyph = { FEASIBLE: "✅", INFEASIBLE: "❌", UNDETERMINED: "⚠️" } as const;
 
-export function SituationSummary({ view, selectedMissionId, onSelectMission }: Props) {
+export function SituationSummary({ view, selectedMissionId, onSelectMission, decisionsRevealed = true }: Props) {
   const incidents = view.incidents;
   const blocked = view.segments.filter((segment) => segment.effectiveState === "BLOCKED");
   const blockedCorridors = [...new Set(blocked.map((segment) => segment.segment.corridor))];
@@ -82,7 +83,7 @@ export function SituationSummary({ view, selectedMissionId, onSelectMission }: P
           <p className="text-xs text-on-surface-variant">When a road fails, what happens to the mission? A road closure is not the answer — the mission decision is.</p>
         </div>
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-          <MissionImpactCards missions={view.missions} selectedMissionId={selectedMissionId} onSelectMission={onSelectMission} />
+          <MissionImpactCards missions={view.missions} selectedMissionId={selectedMissionId} onSelectMission={onSelectMission} decisionsRevealed={decisionsRevealed} />
           <div className="rounded-xs border border-outline-variant/50 bg-surface-container-low p-3">
             <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Route feasibility</p>
             <table className="mt-1 text-center text-sm" aria-label="Route by mission feasibility">
@@ -103,7 +104,7 @@ export function SituationSummary({ view, selectedMissionId, onSelectMission }: P
                     <th className="px-2 py-1 text-left text-xs font-bold text-primary-container">{route.route.name}</th>
                     {view.missions.map((mission) => (
                       <td key={mission.mission.id} className="px-2 py-1">
-                        {glyph[mission.evaluations.find((item) => item.routeId === route.route.id)?.feasibility ?? "UNDETERMINED"]}
+                        {decisionsRevealed || mission.impact.affectedSegmentIds.length === 0 ? glyph[mission.evaluations.find((item) => item.routeId === route.route.id)?.feasibility ?? "UNDETERMINED"] : "⏳"}
                       </td>
                     ))}
                   </tr>
