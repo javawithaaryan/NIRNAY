@@ -12,7 +12,7 @@ import { evidenceWeights } from "@/lib/scenario/engine/evidence";
 import type { PortalState } from "@/lib/scenario/events";
 import { formatStamp } from "@/lib/scenario/format";
 import { TimelineList } from "@/components/portal/MissionStory";
-import { buildIncidentIntelligence, corroborationPipeline, evidenceClassLabels, evidenceRole, evidenceRoleCounts, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
+import { buildIncidentIntelligence, corroborationPipeline, evidenceClassLabels, evidenceTier, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
 import { evidenceTimeline } from "@/lib/scenario/storyline";
 import { getPlace, getSegment } from "@/lib/scenario/seed/nh29";
 import type { IncidentView, PortalView } from "@/lib/scenario/view";
@@ -55,7 +55,8 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
   const seg = getSegment(incident.segmentId);
   const placeName = getPlace(seg.fromPlaceId).name;
   const pipeline = corroborationPipeline(evidence);
-  const roles = evidenceRoleCounts(evidence);
+  const tierCount = (tier: string) => evidence.filter((item) => evidenceTier(item.kind) === tier).length;
+  const tiers = { corroborating: tierCount("CORROBORATING"), supporting: tierCount("SUPPORTING"), contextual: tierCount("CONTEXTUAL") };
   const photoCue = interpretation?.cues.find((cue) => cue.source === "photo");
   const aiFindings: { label: string; text: string; state: "ok" | "warn" | "pending" }[] = [
     {
@@ -71,8 +72,8 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
     { label: "Temporal consistency", text: assessment.T >= 0.8 ? "observation is recent" : "observation is ageing", state: assessment.T >= 0.8 ? "ok" : "warn" },
     {
       label: "Cross-source consistency",
-      text: roles.independent > 0 ? "an independent field observation supports the same incident" : "awaiting an independent observation",
-      state: roles.independent > 0 ? "ok" : "pending",
+      text: tiers.corroborating > 0 ? "an independent field observation supports the same incident" : "awaiting an independent observation",
+      state: tiers.corroborating > 0 ? "ok" : "pending",
     },
     {
       label: "Context consistency",
@@ -147,7 +148,7 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
           <div className="space-y-3">
             {assessment.corroborated ? (
               <p data-corroboration-status="corroborated" className="text-sm font-bold uppercase tracking-wide text-success">
-                {roles.supporting} supporting sources assessed · {roles.independent} independent observation{roles.independent === 1 ? "" : "s"} · {roles.contextual} contextual
+                {evidence.length} evidence items · {tiers.corroborating} corroborating · {tiers.supporting} supporting · {tiers.contextual} contextual
               </p>
             ) : (
               <p data-corroboration-status="in-progress" className="text-sm font-bold uppercase tracking-wide text-secondary">
@@ -156,7 +157,7 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
             )}
             <ul className="space-y-1.5" aria-label="Evidence sources">
               {intel.rows.map((row) => {
-                const role = evidenceRole(row.item.kind);
+                const tier = evidenceTier(row.item.kind);
                 return (
                   <li key={row.item.id} data-evidence-row={row.item.kind} className="arrive grid grid-cols-1 gap-x-3 gap-y-1 rounded-xs border border-outline-variant/50 bg-surface-container-lowest px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
                     <div className="min-w-0">
@@ -173,7 +174,7 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
                     </div>
                     <div className="flex items-start gap-1.5 sm:flex-col sm:items-end">
                       <Badge tone={rowStatusTone[row.status]}>{row.status}</Badge>
-                      <span className="text-[0.625rem] font-bold uppercase tracking-wider text-on-surface-variant">{role === "PRIMARY" ? "Primary evidence" : role === "INDEPENDENT" ? "Independent corroboration" : "Contextual support"}</span>
+                      <span className="text-[0.625rem] font-bold uppercase tracking-wider text-on-surface-variant">{tier}</span>
                     </div>
                   </li>
                 );
@@ -198,7 +199,7 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
               </p>
               <dl className="mt-2 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
                 <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt><dd className="font-mono text-base font-bold text-primary-container">E = {assessment.E.toFixed(2)}</dd></div>
-                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{roles.independent} independent + {roles.contextual} contextual</dd></div>
+                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{tiers.corroborating} corroborating · {tiers.supporting} supporting · {tiers.contextual} contextual</dd></div>
                 <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Freshness</dt><dd><Badge tone={intel.freshness === "CURRENT" ? "success" : intel.freshness === "AGEING" ? "warning" : "danger"}>{intel.freshness === "AGEING" ? "MIXED" : intel.freshness}</Badge></dd></div>
                 <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Assessment</dt><dd><Badge tone={assessment.corroborated ? "success" : "info"}>{assessment.corroborated ? "CORROBORATED" : "IN PROGRESS"}</Badge></dd></div>
               </dl>

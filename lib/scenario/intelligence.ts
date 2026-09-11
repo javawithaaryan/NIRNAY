@@ -218,8 +218,6 @@ export function corroborationPipeline(evidence: EvidenceItem[]): { channels: Cor
   return { channels, received: channels.filter((channel) => channel.item).length, total: channels.length };
 }
 
-export type EvidenceRole = "PRIMARY" | "INDEPENDENT" | "CONTEXTUAL";
-
 export const evidenceClassLabels: Record<EvidenceKind, string> = {
   FIELD_REPORT: "Field evidence",
   NEARBY_REPORT: "Field observation",
@@ -230,19 +228,6 @@ export const evidenceClassLabels: Record<EvidenceKind, string> = {
   HISTORICAL: "Historical context",
   NETWORK_RECORD: "Network context",
 };
-
-export function evidenceRole(kind: EvidenceKind): EvidenceRole {
-  if (kind === "FIELD_REPORT") return "PRIMARY";
-  if (kind === "NEARBY_REPORT" || kind === "SECOND_REPORT") return "INDEPENDENT";
-  return "CONTEXTUAL";
-}
-
-export function evidenceRoleCounts(items: EvidenceItem[]): { primary: number; independent: number; contextual: number; supporting: number } {
-  const roles = items.map((item) => evidenceRole(item.kind));
-  const independent = roles.filter((role) => role === "INDEPENDENT").length;
-  const contextual = roles.filter((role) => role === "CONTEXTUAL").length;
-  return { primary: roles.filter((role) => role === "PRIMARY").length, independent, contextual, supporting: independent + contextual };
-}
 
 export type EvidenceTier = "PRIMARY" | "CORROBORATING" | "SUPPORTING" | "CONTEXTUAL";
 

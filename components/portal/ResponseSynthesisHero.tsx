@@ -34,13 +34,13 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
   const verified = view.incidents.filter((item) => item.incident.verifiedAt).length;
   const strategy = [
     { label: "Incident", value: verified ? "verified" : "pending" },
-    { label: "Network", value: blocked.length ? `${blocked.join(" + ")} blocked` : "unchanged" },
-    { label: "Mission impact", value: `${affectedCount} missions affected` },
+    { label: "Network state", value: blocked.length ? `checked · ${blocked.join(" + ")} blocked` : "checked" },
+    { label: "Mission impact", value: `assessed · ${affectedCount} missions affected` },
     { label: "Vehicle constraints", value: "checked" },
-    { label: "Alternative routes", value: "evaluated" },
-    { label: "Deadlines", value: "checked" },
-    { label: "Current evidence", value: "checked" },
-    { label: "Strategy", value: "prepared" },
+    { label: "Candidate routes", value: "evaluated" },
+    { label: "Evidence freshness", value: "checked" },
+    { label: "ETA", value: "checked" },
+    { label: "Response options", value: "prepared" },
   ];
   const synthesis = sentences.length
     ? sentences.join(" ")
@@ -56,7 +56,7 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
           AI-assisted response synthesis
         </p>
         <p className="text-xs text-on-primary/80">
-          Combining verified incident status, evidence freshness, mission requirements, vehicle constraints and available routes to prepare response options.
+          Combining verified incident evidence, mission requirements, current network state, vehicle constraints and route availability to prepare mission-specific response options.
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
               ✓ {item.label} <span className="text-primary-container">{item.value}</span>
             </li>
           ))}
-          <li className="rounded-xs bg-primary-container px-2 py-0.5 text-on-primary">→ Response options ready</li>
+          <li className="rounded-xs bg-primary-container px-2 py-0.5 text-on-primary">→ Response strategy ready</li>
         </ol>
 
         <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3" aria-label="Mission-specific responses">
