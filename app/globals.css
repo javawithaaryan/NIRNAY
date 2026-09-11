@@ -1,26 +1,63 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-primary: #001026;
+  --color-primary-container: #0b2545;
+  --color-primary-container-hover: #123661;
+  --color-primary-container-active: #071930;
+  --color-on-primary: #ffffff;
+  --color-secondary: #3b608c;
+  --color-secondary-container: #a7ccfe;
+  --color-on-secondary-container: #305681;
+  --color-surface: #f7f9fc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f7;
+  --color-surface-container: #eceef1;
+  --color-surface-container-high: #e6e8eb;
+  --color-surface-container-highest: #e0e3e6;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #44474e;
+  --color-outline: #74777f;
+  --color-outline-variant: #c4c6cf;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-success: #15803d;
+  --color-success-container: #f0fdf4;
+  --color-success-outline: #bbf7d0;
+  --color-warning: #92400e;
+  --color-warning-container: #fef3c7;
+  --color-warning-outline: #fcd34d;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-public-sans), var(--font-noto-devanagari), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    color-scheme: light;
+    background-color: var(--color-surface);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html[data-text-scale="small"] {
+    font-size: 87.5%;
+  }
+
+  html[data-text-scale="large"] {
+    font-size: 112.5%;
+  }
+
+  body {
+    @apply bg-surface font-sans text-on-surface antialiased;
+  }
+
+  ::selection {
+    @apply bg-secondary-container text-on-secondary-container;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-secondary);
+    outline-offset: 2px;
+  }
 }
