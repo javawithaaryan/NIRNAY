@@ -338,12 +338,12 @@ export function CorridorMapLibre({
       dot.style.backgroundColor = tone;
       add(missionLngLat(view), dot);
       const callout = el(
-        `<div class="text-[11px] font-bold" style="color:${tone}">${escape(view.mission.id)} · ${escape(view.vehicle.vehicleClass)} ${view.vehicle.grossTonnes} t</div><div class="text-[10px] text-on-surface-variant">${escape(missionStateText(view))}</div>`,
+        `<div class="text-[11px] font-bold" style="color:${tone}">${escape(view.mission.id)} · ${escape(view.mission.cargo)}</div><div class="text-[10px] font-semibold text-on-surface">${escape(view.vehicle.vehicleClass)} · ${view.vehicle.grossTonnes} t · ${escape(view.mission.priority)}</div><div class="text-[10px] text-on-surface-variant">${escape(missionStateText(view))}</div>`,
         `cursor-pointer rounded-xs border bg-white px-2 py-1 shadow-md ${selected ? "ring-2 ring-secondary" : ""}`,
       );
       callout.style.borderColor = tone;
       callout.addEventListener("click", () => onSelectRef.current?.(view.mission.id));
-      add(missionLngLat(view), callout, "bottom-left", [26, -50 - index * 50]);
+      add(missionLngLat(view), callout, "bottom-left", [26, -50 - index * 60]);
     });
 
     const divertMission = missions.find((view) => view.mission.id === selectedMissionId) ?? missions.find((view) => view.activeDecision?.recommendation.divertPlaceId);

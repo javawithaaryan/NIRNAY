@@ -18,9 +18,9 @@ export function responseStateLabel(view: MissionView): string {
     case "REJECTED":
       return "REJECTED · MANUAL DIRECTION";
     case "HOLD":
-      return "HOLD";
+      return "HOLD · APPROVED";
     case "REROUTE_PENDING_ACK":
-      return "REROUTE · AWAITING DRIVER";
+      return "REROUTE · APPROVED · AWAITING DRIVER";
     case "REROUTING":
       return "REROUTING";
   }

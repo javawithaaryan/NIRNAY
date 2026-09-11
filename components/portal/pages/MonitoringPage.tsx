@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { MissionIdentity } from "@/components/portal/MissionStory";
 import { responseStateLabel } from "@/components/portal/MissionTable";
 import { Badge, Card, CardHeader, PageHeader, actionTone, portalPrimaryButton, priorityTone } from "@/components/portal/ui";
 import { usePortalView } from "@/components/portal/usePortalView";
@@ -44,7 +45,8 @@ export function MonitoringPage() {
                 subtitle={`${item.mission.cargo} · ${item.vehicle.vehicleClass} · ${item.vehicle.name}`}
               />
               <div className="space-y-3 p-4 text-sm sm:p-5">
-                <p className="text-lg font-bold text-primary-container">{responseStateLabel(item)}</p>
+                <MissionIdentity mission={item} />
+                <p data-monitoring-state={item.responseState} className="text-lg font-bold text-primary-container">{responseStateLabel(item)}</p>
                 <dl className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Route</dt>

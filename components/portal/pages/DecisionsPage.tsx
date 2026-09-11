@@ -45,13 +45,13 @@ export function DecisionsPage() {
         <section aria-label="Mission decisions" className="space-y-4">
           <h2 className="text-sm font-black uppercase tracking-wide text-primary-container">Mission decisions ({active.length})</h2>
           {active.map((decision) => (
-            <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)} />
+            <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)} state={state} />
           ))}
           {superseded.length > 0 && (
             <>
               <h2 className="pt-2 text-sm font-black uppercase tracking-wide text-on-surface-variant">Superseded decisions ({superseded.length}) — kept for the record</h2>
               {superseded.map((decision) => (
-                <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)} />
+                <DecisionCard key={decision.id} decision={decision} mission={missionFor(decision.missionId)} state={state} />
               ))}
             </>
           )}

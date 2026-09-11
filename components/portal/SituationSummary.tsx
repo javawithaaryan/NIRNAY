@@ -76,8 +76,8 @@ export function SituationSummary({ view, selectedMissionId, onSelectMission }: P
 
       <div className="space-y-3 border-t border-outline-variant/40 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-sm font-black uppercase tracking-wide text-primary-container">
-            {affected.length ? `One landslide · ${affected.length} missions affected · different decisions` : "Three missions on the Dimapur → Kohima corridor"}
+          <p data-payoff className="text-lg font-black uppercase tracking-tight text-primary-container">
+            {affected.length ? `One landslide. ${affected.length === 3 ? "Three" : affected.length} missions. Different decisions.` : "Three missions on the Dimapur → Kohima corridor"}
           </p>
           <p className="text-xs text-on-surface-variant">When a road fails, what happens to the mission? A road closure is not the answer — the mission decision is.</p>
         </div>

@@ -49,7 +49,7 @@ export type MissionView = {
   vehicle: Vehicle;
   deadlineAt: number;
   impact: ImpactAssessment;
-  priority: { P: number; tier: PriorityTier };
+  priority: { P: number; tier: PriorityTier; D: number };
   evaluations: RouteEvaluation[];
   activeDecision: DecisionRecord | null;
   decisions: DecisionRecord[];
@@ -150,7 +150,7 @@ export function buildView(state: PortalState, now: number): PortalView {
       vehicle,
       deadlineAt: deadline,
       impact,
-      priority: operationalPriority(D, impact.Mi),
+      priority: { ...operationalPriority(D, impact.Mi), D },
       evaluations,
       activeDecision,
       decisions: missionDecisions,

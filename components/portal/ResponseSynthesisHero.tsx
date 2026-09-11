@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowDown, Bot } from "lucide-react";
-import { Badge, impactTone } from "@/components/portal/ui";
-import { actionClass, decisionLabel } from "@/components/portal/MissionStory";
+import { Bot } from "lucide-react";
+import { Badge, impactTone, priorityTone } from "@/components/portal/ui";
+import { CargoIcon, actionClass, decisionLabel } from "@/components/portal/MissionStory";
 import { routeVerdict } from "@/lib/scenario/storyline";
 import type { PortalView } from "@/lib/scenario/view";
+
+const inputs = ["Incident severity", "Mission cargo", "Mission priority", "Deadline", "Vehicle class", "Route states", "Evidence freshness"];
 
 export function ResponseSynthesisHero({ view }: { view: PortalView }) {
   const decided = view.missions.filter((mission) => mission.activeDecision);
@@ -18,15 +20,7 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
     });
     const feasibleFor = verdicts.filter((item) => item.verdict.glyph === "✅");
     const restricted = verdicts.filter((item) => item.verdict.headline.startsWith("INFEASIBLE · VEHICLE"));
-    const glyph = feasibleFor.length ? "✅" : verdicts.every((item) => item.verdict.glyph === "❌") ? "❌" : "⚠️";
-    const headline = feasibleFor.length
-      ? `Feasible for ${[...new Set(feasibleFor.map((item) => item.mission.vehicle.vehicleClass))].join(" / ")} only`
-      : route.worstState === "BLOCKED"
-        ? "BLOCKED"
-        : verdicts.every((item) => item.verdict.headline.startsWith("INFEASIBLE · VEHICLE"))
-          ? "Vehicle-restricted for these missions"
-          : verdicts[0]?.verdict.headline.split(" · ")[0] ?? "—";
-    return { route, glyph, headline, feasibleFor, restricted };
+    return { route, feasibleFor, restricted };
   });
 
   const sentences = routeSummaries
@@ -34,7 +28,7 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
     .map(
       (summary) =>
         `${summary.route.route.name} is compatible with ${summary.feasibleFor.map((item) => `${item.mission.mission.id}'s ${item.mission.vehicle.vehicleClass}`).join(", ")} and current evidence, while ${summary.restricted
-          .map((item) => item.mission.mission.id)
+          .map((item) => `${item.mission.mission.id} (${item.mission.mission.cargo.toLowerCase()}, ${item.mission.vehicle.vehicleClass})`)
           .join(" and ")} cannot use it because of the vehicle restriction (${summary.restricted[0].verdict.reason.split(";")[0]}).`,
     );
   const noneFeasible = routeSummaries.every((summary) => summary.feasibleFor.length === 0);
@@ -51,65 +45,77 @@ export function ResponseSynthesisHero({ view }: { view: PortalView }) {
           <Bot aria-hidden="true" className="size-5" />
           AI-assisted response synthesis
         </p>
-        <p className="text-xs text-on-primary/80">Summarizing the operational consequences of the verified disruption.</p>
+        <p className="text-xs text-on-primary/80">
+          Combining the verified incident, evidence state, mission context and network constraints to prepare mission-specific response options.
+        </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="space-y-2 text-xs">
-          <div>
-            <p className="font-bold uppercase tracking-wider text-on-surface-variant">Verified incident</p>
-            <p className="text-sm font-black uppercase text-error">{blocked.length ? blocked.map((corridor) => `${corridor} → BLOCKED`).join(" · ") : "Network change pending"}</p>
-          </div>
-          <ArrowDown aria-hidden="true" className="size-4 text-outline" />
-          <div>
-            <p className="font-bold uppercase tracking-wider text-on-surface-variant">Missions affected</p>
-            <ul className="mt-1 space-y-1">
-              {decided.map((mission) => (
-                <li key={mission.mission.id} className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-mono font-bold text-primary-container">{mission.mission.id}</span>
-                  <span className="font-bold uppercase text-primary-container">{mission.mission.cargo}</span>
-                  <span className="text-on-surface-variant">
-                    {mission.mission.priority} · {mission.vehicle.vehicleClass}
-                  </span>
-                  <Badge tone={impactTone(mission.impact.level)}>{mission.impact.level} impact</Badge>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <ArrowDown aria-hidden="true" className="size-4 text-outline" />
-          <div>
-            <p className="font-bold uppercase tracking-wider text-on-surface-variant">Routes assessed</p>
-            <ul className="mt-1 space-y-0.5">
-              {routeSummaries.map((summary) => (
-                <li key={summary.route.route.id} data-route-summary={summary.route.route.id} className="font-semibold">
-                  <span aria-hidden="true">{summary.glyph}</span> {summary.route.route.name} · {summary.route.route.label} — {summary.headline}
-                </li>
-              ))}
-            </ul>
-          </div>
+
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+          <p>
+            <span className="font-bold uppercase tracking-wider text-on-surface-variant">Verified incident </span>
+            <span className="text-sm font-black uppercase text-error">{blocked.length ? blocked.map((corridor) => `${corridor} → BLOCKED`).join(" · ") : "Network change pending"}</span>
+          </p>
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span className="font-bold uppercase tracking-wider text-on-surface-variant">Inputs considered</span>
+            {inputs.map((input) => (
+              <span key={input} className="rounded-xs border border-success-outline bg-success-container/50 px-1.5 py-0.5 font-semibold text-success">
+                ✓ {input}
+              </span>
+            ))}
+          </p>
         </div>
-        <div className="space-y-3">
+
+        <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3" aria-label="Mission-specific responses">
+          {decided.map((mission) => {
+            const decision = mission.activeDecision!;
+            const verdicts = [...mission.evaluations].sort((a, b) => a.routeId.localeCompare(b.routeId)).map((evaluation) => routeVerdict(evaluation, mission.vehicle));
+            return (
+              <li key={mission.mission.id} data-response-mission={mission.mission.id} className="flex flex-col gap-2 rounded-xs border border-outline-variant/60 p-3 text-xs">
+                <p className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono font-bold text-primary-container">{mission.mission.id}</span>
+                  <CargoIcon cargo={mission.mission.cargo} className="size-4 text-primary-container" />
+                  <span className="font-black uppercase text-primary-container">{mission.mission.cargo}</span>
+                </p>
+                <p className="flex flex-wrap gap-1">
+                  <Badge tone={priorityTone(mission.mission.priority)}>{mission.mission.priority}</Badge>
+                  <Badge tone="neutral">{mission.vehicle.name}</Badge>
+                  <Badge tone={impactTone(mission.impact.level)}>Impact {mission.impact.level}</Badge>
+                </p>
+                <div>
+                  <p className="font-bold uppercase tracking-wider text-on-surface-variant">Deterministic feasibility result</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {verdicts.map((verdict) => (
+                      <li key={verdict.routeId}>
+                        <span aria-hidden="true">{verdict.glyph}</span> Route {verdict.routeId} — {verdict.headline.toLowerCase()}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="mt-auto">
+                  <span className="font-bold uppercase tracking-wider text-on-surface-variant">NIRNYAY recommendation </span>
+                  <span className={`mt-0.5 inline-block rounded-xs px-2 py-0.5 font-extrabold uppercase ${actionClass(decision.recommendation.action)}`}>{decisionLabel(decision)}</span>
+                  <span className="ml-1 text-on-surface-variant">{decision.status.replace("_", " ").toLowerCase()}</span>
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <p data-response-ai-synthesis className="rounded-xs border border-secondary/30 bg-secondary-container/20 px-3 py-2 text-sm text-on-surface">
-            <span className="font-bold uppercase tracking-wide text-secondary">AI synthesis: </span>
+            <span className="font-bold uppercase tracking-wide text-secondary">AI / system synthesis: </span>
             {synthesis}
           </p>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-primary-container">NIRNYAY recommendations</p>
-            <ul className="mt-1 space-y-1">
-              {decided.map((mission) => (
-                <li key={mission.mission.id} className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-mono font-bold text-primary-container">{mission.mission.id}</span>
-                  <span className="text-on-surface-variant">{mission.mission.cargo.toLowerCase()}</span>
-                  <span aria-hidden="true">→</span>
-                  <span className={`rounded-xs px-2 py-0.5 font-extrabold uppercase ${actionClass(mission.activeDecision!.recommendation.action)}`}>{decisionLabel(mission.activeDecision!)}</span>
-                  <span className="text-on-surface-variant">{mission.activeDecision!.status.replace("_", " ").toLowerCase()}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="rounded-xs border border-primary-container/30 bg-surface-container-low px-3 py-2 text-xs">
+            <p className="font-black uppercase tracking-wide text-primary-container">Why different?</p>
+            <p className="mt-0.5 text-on-surface">Cargo consequence + deadline + vehicle + route dependency + network condition</p>
+            <p className="mt-1 text-sm font-black uppercase text-secondary">Therefore: same disruption ≠ same decision</p>
           </div>
-          <p className="rounded-xs border border-outline-variant/60 bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
-            AI summarizes the evidence and operational situation. <b>Deterministic feasibility rules</b> produce the route result. <b>Authority approval</b> is required before execution.
-          </p>
         </div>
+        <p className="rounded-xs border border-outline-variant/60 bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
+          AI summarizes the evidence and operational situation. <b>Deterministic feasibility rules</b> produce the route result. <b>Authority approval</b> is required before execution.
+        </p>
       </div>
     </section>
   );
