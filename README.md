@@ -76,14 +76,15 @@ A report submitted from `/field/report` in the same browser is picked up as the 
 
 ## Configuration
 
-Everything works without configuration. Two optional build-time variables connect real backends (see `.env.example`):
+Everything works without configuration. Optional build-time variables (see `.env.example`):
 
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_FIELD_REPORT_ENDPOINT` | endpoint that receives queued field reports (multipart upload with an `Idempotency-Key`) |
 | `NEXT_PUBLIC_AI_INTERPRETATION_ENDPOINT` | backend adapter for LLM-based evidence interpretation; without it a deterministic fallback runs in the browser |
+| `NEXT_PUBLIC_MAPTILER_KEY` | optional MapTiler key for a cleaner vector basemap under the corridor; without it the map uses OpenStreetMap raster tiles |
 
-API keys never go in the browser — the AI endpoint is expected to be your own backend that holds them.
+Secret API keys never go in the browser — the AI endpoint is expected to be your own backend that holds them. The MapTiler key is a public browser key by design; restrict it to your deployment domain in the MapTiler dashboard.
 
 ## Deploying
 
@@ -92,7 +93,7 @@ The app is a standard Next.js project with no server-side dependencies.
 - **Vercel:** import the repository; the default settings work (`npm run build`, output handled by Next.js).
 - **Any Node host:** `npm ci && npm run build && npm start` (set `PORT` to change the port).
 
-The operational map loads OpenStreetMap tiles; without internet the corridor, markers and route states still render on a plain background.
+The operational map loads MapTiler vector tiles (when a key is set) or OpenStreetMap tiles; without internet the corridor, markers and route states still render on a plain background.
 
 ## Project layout
 

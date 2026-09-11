@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { Map as MapLibreMap, Marker as MapLibreMarker, StyleSpecification } from "maplibre-gl";
+import type { LayerSpecification, Map as MapLibreMap, Marker as MapLibreMarker, StyleSpecification } from "maplibre-gl";
 import type { EffectiveSegment } from "@/lib/scenario/engine/network";
 import {
   buildSegmentCollection,
@@ -28,7 +28,21 @@ type Props = {
   overlay?: ReactNode;
 };
 
-type BasemapMode = "osm" | "plain";
+type BasemapMode = "vector" | "osm" | "plain";
+
+const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_KEY?.trim() || null;
+const vectorTilesUrl = maptilerKey ? `https://api.maptiler.com/tiles/v3/tiles.json?key=${encodeURIComponent(maptilerKey)}` : null;
+
+const vectorLayers: LayerSpecification[] = [
+  { id: "vt-landcover", type: "fill", source: "basemap-vector", "source-layer": "landcover", filter: ["in", ["get", "class"], ["literal", ["wood", "forest", "grass"]]], paint: { "fill-color": "#dfe9dd", "fill-opacity": 0.7 } },
+  { id: "vt-park", type: "fill", source: "basemap-vector", "source-layer": "park", paint: { "fill-color": "#d8e6d4", "fill-opacity": 0.6 } },
+  { id: "vt-water", type: "fill", source: "basemap-vector", "source-layer": "water", paint: { "fill-color": "#c7dbeb" } },
+  { id: "vt-waterway", type: "line", source: "basemap-vector", "source-layer": "waterway", paint: { "line-color": "#c7dbeb", "line-width": 1.2 } },
+  { id: "vt-roads-minor", type: "line", source: "basemap-vector", "source-layer": "transportation", minzoom: 10, filter: ["in", ["get", "class"], ["literal", ["secondary", "tertiary"]]], paint: { "line-color": "#dde1e7", "line-width": 1 } },
+  { id: "vt-roads-major", type: "line", source: "basemap-vector", "source-layer": "transportation", filter: ["in", ["get", "class"], ["literal", ["motorway", "trunk", "primary"]]], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#cfd4dc", "line-width": 2 } },
+  { id: "vt-boundary-state", type: "line", source: "basemap-vector", "source-layer": "boundary", filter: ["all", ["==", ["get", "admin_level"], 4], ["!=", ["get", "maritime"], 1]], paint: { "line-color": "#7d8296", "line-width": 1.4, "line-dasharray": [3, 2] } },
+  { id: "vt-boundary-country", type: "line", source: "basemap-vector", "source-layer": "boundary", filter: ["all", ["==", ["get", "admin_level"], 2], ["!=", ["get", "maritime"], 1]], paint: { "line-color": "#5b6070", "line-width": 1.8 } },
+];
 
 const baseStyle: StyleSpecification = {
   version: 8,
@@ -108,7 +122,8 @@ export function CorridorMapLibre({
   const markersRef = useRef<MapLibreMarker[]>([]);
   const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
   const [ready, setReady] = useState(false);
-  const [basemap, setBasemap] = useState<BasemapMode>("osm");
+  const [basemap, setBasemap] = useState<BasemapMode>(vectorTilesUrl ? "vector" : "osm");
+  const [vectorFailed, setVectorFailed] = useState(false);
   const [tileError, setTileError] = useState(false);
   const onSelectRef = useRef(onSelectMission);
 
@@ -138,12 +153,26 @@ export function CorridorMapLibre({
       map.addControl(new maplibre.NavigationControl({ showCompass: false }), "top-right");
       map.on("error", (event) => {
         const sourceId = (event as { sourceId?: string }).sourceId;
+        if (sourceId === "basemap-vector") {
+          setVectorFailed(true);
+          setBasemap((current) => (current === "vector" ? "osm" : current));
+          return;
+        }
         if (sourceId === "osm" || String(event.error?.message ?? "").toLowerCase().includes("tile")) setTileError(true);
       });
       map.on("load", () => {
         if (disposed) return;
         map.addSource("osm", osmSource);
         map.addLayer({ id: "osm", type: "raster", source: "osm", paint: { "raster-opacity": 0.8, "raster-saturation": -0.7, "raster-contrast": -0.15 } });
+        if (vectorTilesUrl) {
+          try {
+            map.addSource("basemap-vector", { type: "vector", url: vectorTilesUrl });
+            for (const layer of vectorLayers) map.addLayer({ ...layer, layout: { ...layer.layout, visibility: "none" } } as LayerSpecification);
+          } catch {
+            setVectorFailed(true);
+            setBasemap("osm");
+          }
+        }
         map.addSource("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         map.addLayer({
           id: "segments-highlight",
@@ -208,6 +237,9 @@ export function CorridorMapLibre({
     const map = mapRef.current;
     if (!map || !ready) return;
     map.setLayoutProperty("osm", "visibility", basemap === "osm" ? "visible" : "none");
+    for (const layer of vectorLayers) {
+      if (map.getLayer(layer.id)) map.setLayoutProperty(layer.id, "visibility", basemap === "vector" ? "visible" : "none");
+    }
   }, [basemap, ready]);
 
   useEffect(() => {
@@ -345,7 +377,7 @@ export function CorridorMapLibre({
             Corridor geometry: demo-only simulated
           </span>
           <div role="group" aria-label="Basemap" className="inline-flex overflow-hidden rounded-xs border border-outline-variant/60">
-            {(["osm", "plain"] as BasemapMode[]).map((mode) => (
+            {((vectorTilesUrl && !vectorFailed ? ["vector", "osm", "plain"] : ["osm", "plain"]) as BasemapMode[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -353,7 +385,7 @@ export function CorridorMapLibre({
                 onClick={() => setBasemap(mode)}
                 className={`px-2 py-0.5 font-semibold ${basemap === mode ? "bg-primary-container text-on-primary" : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low"}`}
               >
-                {mode === "osm" ? "OpenStreetMap" : "Plain"}
+                {mode === "vector" ? "Vector" : mode === "osm" ? "OpenStreetMap" : "Plain"}
               </button>
             ))}
           </div>
