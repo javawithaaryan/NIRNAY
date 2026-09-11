@@ -12,6 +12,7 @@ import { PhotoStep } from "@/components/field/PhotoStep";
 import { ReportStepper } from "@/components/field/ReportStepper";
 import { SubmissionResult } from "@/components/field/SubmissionResult";
 import { saveReport } from "@/lib/field/reportStore";
+import { ingestPendingFieldReports } from "@/lib/scenario/bridge";
 import { syncPendingReports } from "@/lib/field/syncEngine";
 import type { IncidentCategory, LocationFix, PreparedPhoto } from "@/lib/field/types";
 import { useFieldSync } from "@/lib/field/useFieldSync";
@@ -77,6 +78,7 @@ export function FieldReportFlow() {
       setSubmittedId(record.id);
       window.scrollTo({ top: 0 });
       void syncPendingReports();
+      ingestPendingFieldReports().catch((error) => console.error("Control room bridge could not ingest the report", error));
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { CircleCheck, RotateCcw } from "lucide-react";
+import { ControlRoomStatus } from "@/components/field/ControlRoomStatus";
 import { FieldNotice } from "@/components/field/FieldNotice";
 import { ReportProgress } from "@/components/field/ReportProgress";
 import { statusToneClasses } from "@/components/field/SyncStatusBadge";
@@ -168,6 +169,7 @@ export function SubmissionResult({ reportId, onReportAnother }: SubmissionResult
             {message.detail && <span className="mt-1 block text-xs">{message.detail}</span>}
           </FieldNotice>
           <ReportProgress report={report} />
+          <ControlRoomStatus report={report} />
         </div>
 
         {report.status === "failed" && reportTransport.configured && (

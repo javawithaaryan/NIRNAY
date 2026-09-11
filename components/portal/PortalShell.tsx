@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AboutDemoDialog } from "@/components/portal/AboutDemoDialog";
+import { ControlRoomBridge, NewIncidentBanner } from "@/components/portal/ControlRoomBridge";
 import { PresenterBar } from "@/components/portal/PresenterBar";
 import { ConnectivityStatus } from "@/components/site/ConnectivityStatus";
 import { HelpdeskDialog } from "@/components/site/HelpdeskDialog";
@@ -50,12 +51,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
   }
 
   const pendingApprovals = view?.summary.pendingApprovals ?? 0;
+  const awaitingVerification = view?.incidents.filter((item) => !item.incident.verifiedAt && !item.incident.rejectedAt).length ?? 0;
   const groups: NavGroup[] = [
     { title: "Overview", items: [{ href: "/dashboard", label: "Command Center", icon: LayoutDashboard }] },
     {
       title: "Operations",
       items: [
-        { href: "/incidents", label: "Incidents & evidence", icon: TriangleAlert },
+        { href: "/incidents", label: "Incidents & evidence", icon: TriangleAlert, badge: awaitingVerification },
         { href: "/missions", label: "Missions", icon: Truck },
         { href: "/network", label: "Network", icon: Radar },
         { href: "/routes", label: "Routes", icon: Route },
@@ -185,12 +187,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </ul>
           </nav>
           <main id="main-content" className="flex-1 space-y-6 p-4 pb-20 sm:p-6 sm:pb-20">
+            {view && <NewIncidentBanner view={view} />}
             {children}
           </main>
         </div>
       </div>
 
       <PresenterBar />
+      <ControlRoomBridge startedAt={view?.startedAt ?? null} />
       <span className="sr-only">
         <Gavel aria-hidden="true" />
       </span>

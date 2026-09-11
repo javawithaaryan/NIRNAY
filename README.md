@@ -59,7 +59,7 @@ Open http://localhost:3000.
 2. Open `/demo`.
 3. Use the small **Presenter** control (bottom right): *Start demo*, then *Next* through the six stages. *Reset demo* returns to the normal state at any time.
 
-A report submitted from `/field/report` in the same browser is picked up as the incident's field evidence, photo included.
+Once a demo run is started, a report submitted from `/field/report` in the same browser is picked up automatically by a local event bridge: the incident is created from the real stored report (photo included), the AI analysis runs and the simulated context evidence is attached, leaving the incident ready for officer verification. The bridge is local to the browser — it is not a server upload, and it never verifies an incident.
 
 ## Scripts
 
