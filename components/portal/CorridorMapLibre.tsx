@@ -308,7 +308,11 @@ export function CorridorMapLibre({
     }
 
     for (const view of incidents) {
-      const status = view.incident.verifiedAt ? "VERIFIED" : view.assessment.status === "CORROBORATED" ? "CORROBORATED" : "PENDING VERIFICATION";
+      const status = view.incident.verifiedAt
+        ? "VERIFIED BY OFFICER"
+        : view.interpretation
+          ? `AI-ASSESSED · ${view.assessment.status === "CORROBORATED" ? "CORROBORATED" : "CORROBORATING"}`
+          : "REPORTED · AI PENDING";
       add(
         incidentLngLat(view),
         el(

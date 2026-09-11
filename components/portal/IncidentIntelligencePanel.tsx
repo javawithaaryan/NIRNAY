@@ -11,7 +11,9 @@ import { portalActions } from "@/lib/scenario/actions";
 import { evidenceWeights } from "@/lib/scenario/engine/evidence";
 import type { PortalState } from "@/lib/scenario/events";
 import { formatStamp } from "@/lib/scenario/format";
-import { buildIncidentIntelligence, corroborationConfidencePercent, corroborationPipeline, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
+import { TimelineList } from "@/components/portal/MissionStory";
+import { buildIncidentIntelligence, corroborationPipeline, evidenceClassLabels, evidenceRole, evidenceRoleCounts, type EvidenceRowStatus, type RailStageState } from "@/lib/scenario/intelligence";
+import { evidenceTimeline } from "@/lib/scenario/storyline";
 import { getPlace, getSegment } from "@/lib/scenario/seed/nh29";
 import type { IncidentView, PortalView } from "@/lib/scenario/view";
 
@@ -50,10 +52,35 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
   const [busy, setBusy] = useState<string | null>(null);
   const { incident, assessment, severity, evidence, interpretation, segment, networkApplied } = incidentView;
   const intel = buildIncidentIntelligence(view, incidentView, state);
-  const pipeline = corroborationPipeline(evidence);
-  const actor = sessionActor(session);
   const seg = getSegment(incident.segmentId);
   const placeName = getPlace(seg.fromPlaceId).name;
+  const pipeline = corroborationPipeline(evidence);
+  const roles = evidenceRoleCounts(evidence);
+  const photoCue = interpretation?.cues.find((cue) => cue.source === "photo");
+  const aiFindings: { label: string; text: string; state: "ok" | "warn" | "pending" }[] = [
+    {
+      label: "Image interpretation",
+      text: !interpretation ? "pending" : photoCue ? `visual pattern consistent with debris / slope obstruction (${interpretation.provider.kind === "llm-backend" ? "model" : "colour-statistics heuristic"})` : interpretation.inputsUsed.photo ? "photo analysed; no strong visual cue" : "no photo attached (seeded report)",
+      state: !interpretation ? "pending" : photoCue ? "ok" : "warn",
+    },
+    {
+      label: "Location consistency",
+      text: assessment.L >= 0.7 ? `reported location falls within ${seg.name} (${seg.corridor})` : "location uncertain or relocated onto the corridor for the demo",
+      state: assessment.L >= 0.7 ? "ok" : "warn",
+    },
+    { label: "Temporal consistency", text: assessment.T >= 0.8 ? "observation is recent" : "observation is ageing", state: assessment.T >= 0.8 ? "ok" : "warn" },
+    {
+      label: "Cross-source consistency",
+      text: roles.independent > 0 ? "an independent field observation supports the same incident" : "awaiting an independent observation",
+      state: roles.independent > 0 ? "ok" : "pending",
+    },
+    {
+      label: "Context consistency",
+      text: !interpretation || interpretation.consistency.assessment === "NO_CONTEXT" ? "context not yet checked" : interpretation.consistency.assessment === "CONSISTENT" ? "weather / institutional context is consistent with the reported disruption" : "context only partly consistent",
+      state: !interpretation || interpretation.consistency.assessment === "NO_CONTEXT" ? "pending" : interpretation.consistency.assessment === "CONSISTENT" ? "ok" : "warn",
+    },
+  ];
+  const actor = sessionActor(session);
   const fieldEvidence = evidence.find((item) => item.kind === "FIELD_REPORT");
   const missingContext = ["SECOND_REPORT", "WEATHER", "INSTITUTIONAL", "HISTORICAL", "LOGISTICS", "NETWORK_RECORD"].filter((kind) => !evidence.some((item) => item.kind === kind));
   const canApplyNetwork = Boolean(incident.verifiedAt) && segment && segment.recordedState !== "BLOCKED";
@@ -115,92 +142,123 @@ export function IncidentIntelligencePanel({ view, state, incidentView, session, 
         <AiInterpretationPanel incidentId={incident.id} interpretation={interpretation} evidenceCount={evidence.length} verified={Boolean(incident.verifiedAt)} />
       </Stage>
 
-      <Stage id="corroboration" number={3} title="Multi-source evidence corroboration" icon={<Radar aria-hidden="true" className="size-4" />} badge={<Badge tone={assessment.corroborated ? "success" : "info"}>{assessment.corroborated ? `Corroborated · ${assessment.independentSources} independent sources` : "Corroboration in progress"}</Badge>}>
-        {assessment.corroborated ? (
-          <p data-corroboration-status="corroborated" className="mb-3 text-sm font-bold uppercase tracking-wide text-success">
-            Corroborated · {assessment.independentSources} independent sources · {pipeline.received} / {pipeline.total} evidence channels received
-          </p>
-        ) : (
-          <div data-corroboration-status="in-progress" className="mb-3">
-            <p className="text-sm font-bold uppercase tracking-wide text-secondary">
-              Corroboration in progress · {pipeline.received} / {pipeline.total} evidence sources received
-            </p>
-            <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {pipeline.channels.map((channel) => (
-                <li key={channel.key} data-channel={channel.key} data-channel-state={channel.item ? "received" : "pending"} className={`flex items-center gap-2 rounded-xs border px-2.5 py-1.5 text-xs ${channel.item ? "border-success-outline bg-success-container/40" : "border-outline-variant/60 bg-surface-container-low"}`}>
-                  {channel.item ? <Check aria-hidden="true" className="size-4 shrink-0 text-success" /> : <Hourglass aria-hidden="true" className="size-4 shrink-0 text-secondary" />}
-                  <span className="font-semibold text-primary-container">{channel.label}</span>
-                  <span className="ml-auto flex items-center gap-1.5">
-                    {channel.item && <SimulatedTag origin={channel.item.origin} />}
-                    <span className={`font-bold uppercase tracking-wide ${channel.item ? "text-success" : "text-secondary"}`}>{channel.item ? channel.receivedStatus : channel.pendingStatus}</span>
-                  </span>
-                </li>
-              ))}
+      <Stage id="corroboration" number={3} title="Multi-source evidence corroboration" icon={<Radar aria-hidden="true" className="size-4" />} badge={<Badge tone={assessment.corroborated ? "success" : "info"}>{assessment.corroborated ? "Corroborated" : "Corroboration in progress"}</Badge>}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
+          <div className="space-y-3">
+            {assessment.corroborated ? (
+              <p data-corroboration-status="corroborated" className="text-sm font-bold uppercase tracking-wide text-success">
+                {roles.supporting} supporting sources assessed · {roles.independent} independent observation{roles.independent === 1 ? "" : "s"} · {roles.contextual} contextual
+              </p>
+            ) : (
+              <p data-corroboration-status="in-progress" className="text-sm font-bold uppercase tracking-wide text-secondary">
+                Evidence being assembled · {pipeline.received} / {pipeline.total} source classes received
+              </p>
+            )}
+            <ul className="space-y-1.5" aria-label="Evidence sources">
+              {intel.rows.map((row) => {
+                const role = evidenceRole(row.item.kind);
+                return (
+                  <li key={row.item.id} data-evidence-row={row.item.kind} className="arrive grid grid-cols-1 gap-x-3 gap-y-1 rounded-xs border border-outline-variant/50 bg-surface-container-lowest px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-1.5">
+                        <Check aria-hidden="true" className="size-4 shrink-0 text-success" />
+                        <span className="text-sm font-bold text-primary-container">{row.kindLabel}</span>
+                        <span className="rounded-xs border border-outline-variant/60 px-1.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-on-surface-variant">{evidenceClassLabels[row.item.kind]}</span>
+                        <SimulatedTag origin={row.item.origin} />
+                      </p>
+                      <p className="mt-0.5 text-on-surface-variant">
+                        {row.contribution} · {row.relevance} · {formatStamp(row.item.capturedAt)}
+                        <span className="block truncate">{row.item.source}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-1.5 sm:flex-col sm:items-end">
+                      <Badge tone={rowStatusTone[row.status]}>{row.status}</Badge>
+                      <span className="text-[0.625rem] font-bold uppercase tracking-wider text-on-surface-variant">{role === "PRIMARY" ? "Primary evidence" : role === "INDEPENDENT" ? "Independent corroboration" : "Contextual support"}</span>
+                    </div>
+                  </li>
+                );
+              })}
+              {pipeline.channels
+                .filter((channel) => !channel.item)
+                .map((channel) => (
+                  <li key={channel.key} data-channel={channel.key} data-channel-state="pending" className="flex items-center gap-2 rounded-xs border border-dashed border-outline-variant/70 px-3 py-2 text-xs text-on-surface-variant">
+                    <Hourglass aria-hidden="true" className="size-4 shrink-0 text-secondary" />
+                    <span className="font-semibold">{channel.label}</span>
+                    <span className="ml-auto font-bold uppercase tracking-wide text-secondary">{channel.pendingStatus}</span>
+                  </li>
+                ))}
             </ul>
-            <p className="mt-1.5 text-[0.6875rem] text-on-surface-variant">Nearby reports are searched in this device&apos;s field-report store; weather, institutional, logistics and context feeds are simulated or seeded in this prototype and attach as the scenario advances.</p>
-          </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-outline-variant/40 bg-surface-container text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">
-                <th className="px-2 py-2 text-left">Source</th>
-                <th className="px-2 py-2 text-left">Origin</th>
-                <th className="px-2 py-2 text-left">Time</th>
-                <th className="px-2 py-2 text-left">Distance / relevance</th>
-                <th className="px-2 py-2 text-left">Status</th>
-                <th className="px-2 py-2 text-left">Contribution</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant/40">
-              {intel.rows.map((row) => (
-                <tr key={row.item.id} data-evidence-row={row.item.kind}>
-                  <td className="px-2 py-2"><span className="font-semibold text-primary-container">{row.kindLabel}</span><span className="block text-on-surface-variant">{row.item.source}</span></td>
-                  <td className="px-2 py-2"><SimulatedTag origin={row.item.origin} /></td>
-                  <td className="px-2 py-2 font-mono">{formatStamp(row.item.capturedAt)}</td>
-                  <td className="px-2 py-2">{row.relevance}</td>
-                  <td className="px-2 py-2"><Badge tone={rowStatusTone[row.status]}>{row.status}</Badge></td>
-                  <td className="px-2 py-2 text-on-surface-variant">{row.contribution}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.6875rem] text-on-surface-variant">
-          <span>Simulated and seeded rows are mocked feeds — no government, weather or logistics API is connected. Nearby reports are read from the field-report store on this device.</span>
-          {!incident.verifiedAt && !incident.rejectedAt && (
-            <span className="ml-auto flex flex-wrap gap-1.5">
-              <button type="button" disabled={busy !== null} onClick={() => void act("nearby", () => portalActions.attachNearbyFieldReports(actor, incident.id))} className={portalSecondaryButton}>Scan nearby reports</button>
-              {missingContext.length > 0 && (
-                <button type="button" disabled={busy !== null} onClick={() => void act("context", () => portalActions.addAllContextEvidence(actor, incident.id))} className={portalSecondaryButton}>+ Attach simulated context ({missingContext.length})</button>
+
+            <div data-evidence-synthesis className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary-container">Evidence synthesis</p>
+              <p className="mt-1 text-sm font-medium text-on-surface">
+                {assessment.corroborated
+                  ? "Multiple sources converge on the same disruption location and incident type."
+                  : "A single field observation so far — corroborating sources are still being assembled."}
+              </p>
+              <dl className="mt-2 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt><dd className="font-mono text-base font-bold text-primary-container">E = {assessment.E.toFixed(2)}</dd></div>
+                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{roles.independent} independent + {roles.contextual} contextual</dd></div>
+                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Freshness</dt><dd><Badge tone={intel.freshness === "CURRENT" ? "success" : intel.freshness === "AGEING" ? "warning" : "danger"}>{intel.freshness === "AGEING" ? "MIXED" : intel.freshness}</Badge></dd></div>
+                <div><dt className="font-semibold uppercase tracking-wider text-on-surface-variant">Assessment</dt><dd><Badge tone={assessment.corroborated ? "success" : "info"}>{assessment.corroborated ? "CORROBORATED" : "IN PROGRESS"}</Badge></dd></div>
+              </dl>
+              <details className="mt-2 text-[0.6875rem] text-on-surface-variant">
+                <summary className="cursor-pointer font-semibold text-secondary">How was E calculated?</summary>
+                <p className="mt-1">E = {evidenceWeights.L}·L + {evidenceWeights.T}·T + {evidenceWeights.C}·C + {evidenceWeights.S}·S + {evidenceWeights.K}·K (L {assessment.L.toFixed(2)} · T {assessment.T.toFixed(2)} · C {assessment.C.toFixed(2)} · S {assessment.S.toFixed(2)} · K {assessment.K.toFixed(2)}) — how much to trust the evidence; not incident severity and not an AI probability.</p>
+              </details>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-[0.6875rem] text-on-surface-variant">
+              <span>Simulated and seeded sources are mocked feeds — no government, weather or logistics API is connected. Nearby reports are read from the field-report store on this device.</span>
+              {!incident.verifiedAt && !incident.rejectedAt && (
+                <span className="ml-auto flex flex-wrap gap-1.5">
+                  <button type="button" disabled={busy !== null} onClick={() => void act("nearby", () => portalActions.attachNearbyFieldReports(actor, incident.id))} className={portalSecondaryButton}>Scan nearby reports</button>
+                  {missingContext.length > 0 && (
+                    <button type="button" disabled={busy !== null} onClick={() => void act("context", () => portalActions.addAllContextEvidence(actor, incident.id))} className={portalSecondaryButton}>+ Attach simulated context ({missingContext.length})</button>
+                  )}
+                </span>
               )}
-            </span>
-          )}
+            </div>
+          </div>
+          <TimelineList steps={evidenceTimeline(state, incident.id)} title="Evidence processing timeline" emptyText="Waiting for the field report." />
         </div>
       </Stage>
 
-      <Stage id="synthesis" number={4} title="AI evidence synthesis" icon={<Bot aria-hidden="true" className="size-4" />} badge={<Badge tone="warning">Assistive</Badge>}>
-        <p data-ai-synthesis className="text-sm font-medium text-on-surface">“{intel.synthesis}”</p>
-        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt><dd className="font-mono text-lg font-bold text-primary-container">E = {assessment.E.toFixed(2)}</dd><dd className="text-[0.6875rem] text-on-surface-variant">L {assessment.L.toFixed(2)}×{evidenceWeights.L} · T {assessment.T.toFixed(2)}×{evidenceWeights.T} · C {assessment.C.toFixed(2)}×{evidenceWeights.C} · S {assessment.S.toFixed(2)}×{evidenceWeights.S} · K {assessment.K.toFixed(2)}×{evidenceWeights.K}</dd></div>
-          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Corroboration</dt><dd className="font-semibold">{assessment.corroborated ? `${evidence.length} evidence items · ${assessment.independentSources} independent` : `In progress · ${pipeline.received} / ${pipeline.total} sources`}</dd></div>
-          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">Freshness</dt><dd><Badge tone={intel.freshness === "CURRENT" ? "success" : intel.freshness === "AGEING" ? "warning" : "danger"}>{intel.freshness}</Badge></dd></div>
-          <div><dt className="text-[0.6875rem] font-semibold uppercase tracking-wider text-on-surface-variant">AI interpretation</dt><dd className="font-semibold">{interpretation ? `CONSISTENT WITH ${interpretation.hazard.label}` : "pending"}</dd></div>
-        </dl>
-        <div data-ai-triage className="mt-3 grid grid-cols-1 gap-3 rounded-xs border border-secondary/30 bg-secondary-container/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-primary-container">AI-assisted triage</p>
-            <p className="mt-1 text-sm text-on-surface">Cross-checks available field, nearby, weather, institutional, logistics and historical signals to prioritize verification.</p>
-            <p className="mt-1 text-xs text-on-surface-variant">AI reduces manual evidence-checking time by bringing relevant signals together for the verifying officer.</p>
-          </div>
-          <div className="sm:text-right">
-            <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Corroboration confidence</p>
-            <p data-corroboration-confidence className="text-3xl font-black text-primary-container">{corroborationConfidencePercent(assessment.E)}%</p>
-            <p className="text-xs text-on-surface-variant">
-              {assessment.corroborated ? `${evidence.length} evidence items · ${assessment.independentSources} independent corroborating sources` : `Corroboration in progress · ${pipeline.received} / ${pipeline.total} sources`}
+      <Stage id="synthesis" number={4} title="AI-assisted evidence synthesis" icon={<Bot aria-hidden="true" className="size-4" />} badge={<Badge tone="warning">Assistive</Badge>}>
+        <div data-ai-triage className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+              <div>
+                <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">AI interpretation</p>
+                <p className="text-2xl font-black uppercase text-primary-container">{interpretation ? interpretation.hazard.label : "Pending"}</p>
+              </div>
+              {interpretation && (
+                <div>
+                  <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-on-surface-variant">Classification confidence</p>
+                  <p data-classification-confidence className="text-2xl font-black text-primary-container">{Math.round(interpretation.confidence * 100)}%</p>
+                </div>
+              )}
+            </div>
+            {interpretation && <p className="text-[0.6875rem] text-on-surface-variant">Model classification confidence ({interpretation.provider.kind === "llm-backend" ? "LLM adapter" : "deterministic fallback"}) — not a validated probability that the incident is true.</p>}
+            <ul className="space-y-1 text-xs" aria-label="AI findings">
+              {aiFindings.map((finding) => (
+                <li key={finding.label} data-ai-finding={finding.state} className="arrive flex gap-2">
+                  <span aria-hidden="true" className={`mt-0.5 font-bold ${finding.state === "ok" ? "text-success" : finding.state === "warn" ? "text-warning" : "text-outline"}`}>{finding.state === "ok" ? "✓" : finding.state === "warn" ? "⚠" : "⏳"}</span>
+                  <span><span className="font-bold text-primary-container">{finding.label}</span> — {finding.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p data-ai-synthesis className="rounded-xs border border-secondary/30 bg-secondary-container/20 px-3 py-2 text-sm font-medium text-on-surface">
+              <span className="font-bold uppercase tracking-wide text-secondary">AI synthesis: </span>
+              {interpretation ? `Evidence is consistent with a ${interpretation.hazard.label.toLowerCase()} near ${placeName} (${seg.corridor}).` : "Awaiting AI interpretation of the field report."}
             </p>
+            <p className="text-xs text-on-surface-variant">AI reduces manual evidence-checking time by bringing relevant signals together for the verifying officer.</p>
           </div>
-          <p className="text-[0.6875rem] text-on-surface-variant sm:col-span-2">Final incident verification remains with the authorized officer. Confidence shown is the deterministic evidence score E = {assessment.E.toFixed(2)}.</p>
+          <dl className="space-y-3 rounded-xs border border-outline-variant/60 bg-surface-container-low p-3 text-xs">
+            <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Evidence quality</dt><dd className="font-mono text-xl font-black text-primary-container">E = {assessment.E.toFixed(2)}</dd><dd className="text-[0.6875rem] text-on-surface-variant">Deterministic evidence score</dd></div>
+            <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Recommended next step</dt><dd className="text-sm font-bold text-primary-container">{incident.verifiedAt ? "Verified — network update" : assessment.corroborated && interpretation ? "Verification package ready" : "Gather corroboration"}</dd></div>
+            <div><dt className="font-bold uppercase tracking-wider text-on-surface-variant">Official status</dt><dd className={`font-bold ${incident.verifiedAt ? "text-success" : incident.rejectedAt ? "text-on-error-container" : "text-warning"}`}>{incident.verifiedAt ? "Verified by authorized officer" : incident.rejectedAt ? "Rejected by officer" : "Pending officer verification"}</dd></div>
+          </dl>
         </div>
       </Stage>
 

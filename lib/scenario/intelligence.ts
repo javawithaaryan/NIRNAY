@@ -61,13 +61,13 @@ function rowFor(item: EvidenceItem): EvidenceRow {
     case "SECOND_REPORT":
       return { ...base, relevance: `${item.distanceKm ?? 0.5} km`, status: "CORROBORATES", contribution: "Independent observation (C)" };
     case "WEATHER":
-      return { ...base, relevance: "Relevant", status: "SUPPORTS", contribution: "Contextual consistency (K)" };
+      return { ...base, relevance: "Relevant", status: "SUPPORTS", contribution: "Recent rainfall context (K)" };
     case "INSTITUTIONAL":
-      return { ...base, relevance: "Relevant", status: "CORROBORATES", contribution: "Institutional context (C, K)" };
+      return { ...base, relevance: "Relevant", status: "SUPPORTS", contribution: "Regional disruption context (C, K)" };
     case "HISTORICAL":
-      return { ...base, relevance: "Reference", status: "CONTEXT", contribution: "Background (K)" };
+      return { ...base, relevance: "Reference", status: "CONTEXT", contribution: "Known corridor vulnerability (K)" };
     case "LOGISTICS":
-      return { ...base, relevance: "Relevant", status: "SUPPORTS", contribution: "Movement halted (C, K)" };
+      return { ...base, relevance: "Relevant", status: "SUPPORTS", contribution: "Corridor movement impact (C, K)" };
     case "NETWORK_RECORD":
       return { ...base, relevance: "Segment", status: "CONTEXT", contribution: "Prior road state (K)" };
   }
@@ -142,7 +142,7 @@ export function buildIncidentIntelligence(view: PortalView, incidentView: Incide
   const rail: RailStage[] = [
     { key: "report", label: "Field report received", state: "done", detail: `${incident.reference} · ${placeName}` },
     { key: "ai", label: "AI decoded", state: interpretation ? "done" : "active", detail: interpretation ? `${interpretation.hazard.label} · ${interpretation.confidence.toFixed(2)}` : "pending AI analysis" },
-    { key: "corroboration", label: "Corroborated", state: assessment.corroborated ? "done" : interpretation ? "active" : "pending", detail: assessment.corroborated ? `${assessment.independentSources} independent sources · E ${assessment.E.toFixed(2)}` : "corroboration in progress" },
+    { key: "corroboration", label: "Corroborated", state: assessment.corroborated ? "done" : interpretation ? "active" : "pending", detail: assessment.corroborated ? `${assessment.independentSources} supporting sources · E ${assessment.E.toFixed(2)}` : "corroboration in progress" },
     {
       key: "verification",
       label: "Officer verification",
@@ -218,6 +218,37 @@ export function corroborationPipeline(evidence: EvidenceItem[]): { channels: Cor
   return { channels, received: channels.filter((channel) => channel.item).length, total: channels.length };
 }
 
-export function corroborationConfidencePercent(E: number): number {
-  return Math.round(E * 100);
+export type EvidenceRole = "PRIMARY" | "INDEPENDENT" | "CONTEXTUAL";
+
+export const evidenceClassLabels: Record<EvidenceKind, string> = {
+  FIELD_REPORT: "Field evidence",
+  NEARBY_REPORT: "Field observation",
+  SECOND_REPORT: "Field observation",
+  WEATHER: "Weather context",
+  INSTITUTIONAL: "Institutional",
+  LOGISTICS: "Operational",
+  HISTORICAL: "Historical context",
+  NETWORK_RECORD: "Network context",
+};
+
+export function evidenceRole(kind: EvidenceKind): EvidenceRole {
+  if (kind === "FIELD_REPORT") return "PRIMARY";
+  if (kind === "NEARBY_REPORT" || kind === "SECOND_REPORT") return "INDEPENDENT";
+  return "CONTEXTUAL";
+}
+
+export function evidenceRoleCounts(items: EvidenceItem[]): { primary: number; independent: number; contextual: number; supporting: number } {
+  const roles = items.map((item) => evidenceRole(item.kind));
+  const independent = roles.filter((role) => role === "INDEPENDENT").length;
+  const contextual = roles.filter((role) => role === "CONTEXTUAL").length;
+  return { primary: roles.filter((role) => role === "PRIMARY").length, independent, contextual, supporting: independent + contextual };
+}
+
+export type EvidenceTier = "PRIMARY" | "CORROBORATING" | "SUPPORTING" | "CONTEXTUAL";
+
+export function evidenceTier(kind: EvidenceKind): EvidenceTier {
+  if (kind === "FIELD_REPORT") return "PRIMARY";
+  if (kind === "NEARBY_REPORT" || kind === "SECOND_REPORT") return "CORROBORATING";
+  if (kind === "WEATHER" || kind === "INSTITUTIONAL" || kind === "LOGISTICS") return "SUPPORTING";
+  return "CONTEXTUAL";
 }

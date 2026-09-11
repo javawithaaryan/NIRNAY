@@ -185,7 +185,7 @@ export function buildView(state: PortalState, now: number): PortalView {
         title: `${view.incident.reference} · ${view.incident.ai.label}`,
         detail:
           view.assessment.status === "CORROBORATED"
-            ? `Corroborated by ${view.assessment.independentSources} independent sources (E = ${view.assessment.E}). Officer verification required.`
+            ? `Corroborated by ${view.assessment.independentSources} supporting sources (E = ${view.assessment.E}). Verification package ready for the officer.`
             : `Evidence quality E = ${view.assessment.E}. Awaiting corroboration or verification.`,
         href: `/incidents/${view.incident.id}`,
         severity: "high",

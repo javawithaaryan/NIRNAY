@@ -7,10 +7,12 @@ import { ActionDrawer } from "@/components/portal/ActionDrawer";
 import { CorridorMapLibre } from "@/components/portal/CorridorMapLibre";
 import { DecisionStrip } from "@/components/portal/DecisionStrip";
 import { FeasibilityMatrix } from "@/components/portal/FeasibilityMatrix";
-import { IncidentSummaryCard } from "@/components/portal/IncidentSummaryCard";
+import { IncidentIntelligenceHero } from "@/components/portal/IncidentIntelligenceHero";
+import { ResponseSynthesisHero } from "@/components/portal/ResponseSynthesisHero";
 import { ResponseActionsPanel } from "@/components/portal/ResponseActionsPanel";
 import { ResponseSynthesisPanel } from "@/components/portal/ResponseSynthesisPanel";
 import { RegionOrientation } from "@/components/portal/RegionOrientation";
+import { ReassessmentAlert, TimelineList } from "@/components/portal/MissionStory";
 import { SituationSummary } from "@/components/portal/SituationSummary";
 import { StoryStrip } from "@/components/portal/StoryStrip";
 import { portalPrimaryButton } from "@/components/portal/ui";
@@ -19,6 +21,7 @@ import { sessionActor, useSession } from "@/lib/auth/session";
 import { portalActions } from "@/lib/scenario/actions";
 import type { EffectiveSegment } from "@/lib/scenario/engine/network";
 import { formatStamp } from "@/lib/scenario/format";
+import { responseTimeline } from "@/lib/scenario/storyline";
 import { usePortalState } from "@/lib/scenario/store";
 
 export function Dashboard() {
@@ -32,7 +35,9 @@ export function Dashboard() {
   if (!view || !state || !session) return <p className="text-sm text-on-surface-variant">Loading operational state…</p>;
 
   const selectedMission = view.missions.find((mission) => mission.mission.id === selectedMissionId) ?? null;
-  const highlightRouteId = selectedRouteId ?? selectedMission?.activeDecision?.recommendation.routeId ?? (selectedMission ? selectedMission.currentRouteId : null);
+  const rerouting = view.missions.find((mission) => mission.activeDecision?.recommendation.action === "REROUTE" && mission.activeDecision.status !== "SUPERSEDED");
+  const highlightRouteId =
+    selectedRouteId ?? selectedMission?.activeDecision?.recommendation.routeId ?? (selectedMission ? selectedMission.currentRouteId : null) ?? rerouting?.activeDecision?.recommendation.routeId ?? null;
   const latestIncident = view.incidents[view.incidents.length - 1] ?? null;
 
   const reevaluate = async () => {
@@ -71,6 +76,14 @@ export function Dashboard() {
 
       <StoryStrip view={view} state={state} />
 
+      <IncidentIntelligenceHero view={view} state={state} incidentView={latestIncident} session={session} />
+
+      <SituationSummary view={view} state={state} selectedMissionId={selectedMissionId} onSelectMission={selectMission} />
+
+      <ReassessmentAlert state={state} missions={view.missions} />
+
+      <ResponseSynthesisHero view={view} />
+
       <section id="operational-map" className="grid scroll-mt-20 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-label="Operational workspace">
         <div className="flex min-w-0 flex-col gap-3">
           <CorridorMapLibre
@@ -83,11 +96,10 @@ export function Dashboard() {
             heightClass="h-[420px] sm:h-[500px] xl:h-[560px]"
             overlay={<NetworkChangeOverlay segments={view.segments} />}
           />
-          <SituationSummary view={view} state={state} selectedMissionId={selectedMissionId} onSelectMission={selectMission} />
+          <TimelineList steps={responseTimeline(state).slice(-8)} title="Live response timeline · latest" emptyText="Waiting for a field incident." />
         </div>
         <div className="flex flex-col gap-3">
           <RegionOrientation />
-          <IncidentSummaryCard view={view} state={state} incidentView={latestIncident} session={session} />
         </div>
       </section>
 

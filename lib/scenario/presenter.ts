@@ -96,9 +96,9 @@ export const presenterSteps: PresenterStep[] = [
       );
     },
   },
-  { n: 6, label: "Missions affected", description: "One network event fans out to three missions with different impact.", href: "/dashboard", anchor: "operational-map" },
-  { n: 7, label: "Route analysis", description: "Routes A, B and C compared per mission with vehicle-aware feasibility.", href: "/dashboard", anchor: "feasibility" },
-  { n: 8, label: "Decision", description: "Same disruption, different decisions — each with a WHY, plus the AI-assisted response synthesis.", href: "/dashboard", anchor: "decisions" },
+  { n: 6, label: "Missions affected", description: "One network event fans out to three missions with different impact.", href: "/dashboard", anchor: "situation" },
+  { n: 7, label: "Route analysis", description: "Routes A, B and C compared per mission with vehicle-aware feasibility.", href: "/dashboard", anchor: "response-synthesis" },
+  { n: 8, label: "Decision", description: "Same disruption, different decisions — each with a WHY, plus the AI-assisted response synthesis.", href: "/dashboard", anchor: "situation" },
   {
     n: 9,
     label: "Authority",
@@ -136,7 +136,7 @@ export const presenterSteps: PresenterStep[] = [
   {
     n: 12,
     label: "Second disruption",
-    anchor: "operational-map",
+    anchor: "reassessment-alert",
     description: "Landslide on the Niuland bypass (Route C): reported, corroborated, verified and applied — Route C OPEN → BLOCKED.",
     href: "/dashboard",
     apply: async (actor) => {
@@ -144,13 +144,13 @@ export const presenterSteps: PresenterStep[] = [
       await interpretStaleIncidents();
     },
   },
-  { n: 13, label: "Reassessment", description: "Previous approved M-103 reroute is SUPERSEDED; the engine re-evaluates.", href: "/dashboard", anchor: "decisions" },
+  { n: 13, label: "Reassessment", description: "Previous approved M-103 reroute is SUPERSEDED; the engine re-evaluates.", href: "/dashboard", anchor: "reassessment-alert" },
   {
     n: 14,
     label: "No verified feasible route",
     description: "A BLOCKED · B HIGH RISK / STALE · C BLOCKED → HOLD + VERIFY / ESCALATE. Abstaining is a valid outcome.",
     href: "/dashboard",
-    anchor: "feasibility",
+    anchor: "situation",
   },
 ];
 

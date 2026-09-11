@@ -177,8 +177,8 @@ export function AiInterpretationPanel({ incidentId, interpretation, evidenceCoun
           </>
         )}
 
-        <div className="rounded-xs border border-error/30 bg-error-container/50 p-3 text-xs text-on-error-container">
-          <p className="font-bold uppercase tracking-wider">What this interpretation cannot do</p>
+        <div className="rounded-xs border border-outline-variant/60 bg-surface-container-low p-3 text-xs text-on-surface-variant">
+          <p className="font-bold uppercase tracking-wider text-primary-container">Scope of this interpretation</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             {aiGuardrails.map((rule) => (
               <li key={rule}>{rule}</li>
